@@ -9,6 +9,10 @@ import { t, getCategoryName } from "./i18n.js";
 import { centerBooth, fitMap } from "./map.js";
 import { findRouteToBooth } from "./map-routing.js";
 
+let originBoothId = null; // บูทที่ผู้ใช้บอกว่า "ฉันอยู่ที่นี่"
+let pickingOrigin = false; // กำลังอยู่ในโหมดเลือกบูทหรือไม่
+const announce = $("#announcement");
+
 function getBoothLogo(booth) {
   const defaultLogo = "./assets/default_logo.png";
 
@@ -40,6 +44,17 @@ export function escapeHTML(value) {
         "'": "&#39;",
       })[character],
   );
+}
+const PIN_SCALE = 0.6; // แก้ขนาดหมุดทั้ง 2 อันที่นี่ที่เดียว
+
+function pinMarkup(color) {
+  return `
+    <g transform="scale(${PIN_SCALE})">
+      <path d="M0 0 C0 0 -20 -26 -20 -40 C-20 -51 -12 -60 0 -60 C12 -60 20 -51 20 -40 C20 -26 0 0 0 0 Z"
+            fill="${color}" stroke="#fff" stroke-width="5" stroke-linejoin="round"
+            paint-order="stroke"/>
+      <circle cx="0" cy="-40" r="8" fill="#fff"/>
+    </g>`;
 }
 
 function getSafeFacebookURL(value) {
@@ -309,15 +324,10 @@ export function detailHTML(booth) {
   const facebookURL = getSafeFacebookURL(booth.facebook);
   const facebookHTML = facebookURL
     ? `
-      <div class="fact">
-        
-        <a href="${escapeHTML(facebookURL)}" target="_blank" rel="noopener noreferrer">
-        <svg class="icon fb-logo" viewBox="0 0 24 24" aria-hidden="true">
-          <rect width="24" height="24" rx="5" fill="#1877F2"/>
-          <path fill="#fff" d="M16.67 15.47l.53-3.47h-3.33V9.75c0-.95.47-1.88 1.96-1.88h1.51V4.92s-1.37-.23-2.68-.23c-2.74 0-4.53 1.66-4.53 4.67V12H7.08v3.47h3.05V24h3.74v-8.53h2.8z"/>
-        </svg>
-        ${t("facebook")}</a>
-      </div>`
+        <div class="fact">
+          <span aria-hidden="true">f</span>
+          <a href="${escapeHTML(facebookURL)}" target="_blank" rel="noopener noreferrer">${t("facebook")}</a>
+        </div>`
     : "";
 
   return `
@@ -363,13 +373,16 @@ export function detailHTML(booth) {
     </div>
 
     <div class="detail-actions">
-      <button class="button primary" data-action="directions">
-        ${icon("route")} ${t("getDirections")}
-      </button>
-      <button class="button" data-action="share">
-        ${icon("share")} ${t("shareBooth")}
-      </button>
-    </div>
+  <button class="button primary" data-action="directions">
+    ${icon("route")} ${t("getDirections")}
+  </button>
+  <button class="button" data-action="set-origin">
+    ${icon("pin")} ${state.lang === "lo" ? "ຂ້ອຍຢູ່ບ່ອນນີ້" : "I'm here"}
+  </button>
+  <button class="button" data-action="share">
+    ${icon("share")} ${t("shareBooth")}
+  </button>
+</div>
   `;
 }
 
@@ -377,6 +390,10 @@ export function selectBooth(id, openMobile = false, center = false) {
   const booth = boothById.get(id);
   if (!booth) return;
 
+  if (pickingOrigin) {
+    setOrigin(id);
+    return;
+  }
   if (state.selected !== id) {
     const routePath = $("#route-path");
     const routeNotice = $("#route-notice");
@@ -409,6 +426,7 @@ export function selectBooth(id, openMobile = false, center = false) {
   const pin = $("#selection-pin");
   if (pin) {
     pin.removeAttribute("hidden");
+    pin.innerHTML = pinMarkup("#e8365d"); // สีแดง
     pin.setAttribute(
       "transform",
       `translate(${booth.x + booth.width / 2} ${booth.y - 3})`,
@@ -434,7 +452,6 @@ export function selectBooth(id, openMobile = false, center = false) {
     }
   }
 
-  const announce = $("#announcement");
   if (announce)
     announce.textContent = t(
       "selectedBoothAnnounce",
@@ -499,6 +516,9 @@ export function clearSelectedBooth() {
 }
 
 export function showDirections() {
+  const booth = boothById.get(state.selected);
+  const originBooth = originBoothId ? boothById.get(originBoothId) : null;
+  const route = findRouteToBooth(booth, originBooth);
   if (isBoothsPage) {
     const url = new URL("./index.php", location.href);
     url.hash = state.selected;
@@ -507,10 +527,7 @@ export function showDirections() {
     return;
   }
 
-  const booth = boothById.get(state.selected);
   if (!booth) return;
-
-  const route = findRouteToBooth(booth);
   if (!route) {
     toast(
       state.lang === "lo"
@@ -535,13 +552,11 @@ export function showDirections() {
 
   const routeNotice = $("#route-notice");
   if (routeNotice) {
-    routeNotice.textContent = t(
-      "routeNotice",
-      route.entrance,
-      booth.zone,
-      booth.name,
-      booth.id,
-    );
+    routeNotice.textContent = originBooth
+      ? state.lang === "lo"
+        ? `ຈາກບູທ ${originBooth.id} ໄປບູທ ${booth.id} (${booth.name})`
+        : `From Booth ${originBooth.id} to Booth ${booth.id} (${booth.name})`
+      : t("routeNotice", route.entrance, booth.zone, booth.name, booth.id);
     routeNotice.classList.add("is-visible");
   }
 
@@ -559,9 +574,10 @@ export function showDirections() {
     });
   }
 
-  const announce = $("#announcement");
   if (announce)
-    announce.textContent = t("routeAnnounce", route.entrance, booth.id);
+    announce.textContent = originBooth
+      ? `${originBooth.id} → ${booth.id}`
+      : t("routeAnnounce", route.entrance, booth.id);
 }
 
 let toastTimer;
@@ -755,6 +771,62 @@ function openLightbox(gallery) {
   if (!lightbox.open) lightbox.showModal();
 }
 
+function setOrigin(id) {
+  const booth = boothById.get(id);
+  if (!booth) return;
+
+  originBoothId = id;
+  pickingOrigin = false;
+  document.body.classList.remove("picking-origin");
+  $("#pick-origin")?.classList.remove("active");
+
+  // วาดหมุดสีน้ำเงินที่บูทต้นทาง (ต้องมี <g id="origin-pin"></g> ใน SVG แผนที่)
+  const g = $("#origin-pin");
+  if (g) {
+    g.innerHTML = pinMarkup("#1a73e8"); // สีน้ำเงิน
+    g.setAttribute(
+      "transform",
+      `translate(${booth.x + booth.width / 2} ${booth.y - 3})`,
+    );
+  }
+
+  toast(
+    state.lang === "lo"
+      ? `ຕັ້ງຈຸດເລີ່ມຕົ້ນ: ບູທ ${booth.id}`
+      : `Starting point set: Booth ${booth.id}`,
+  );
+
+  // ถ้ามีบูทปลายทางที่เลือกค้างอยู่ และเป็นคนละบูท ให้นำทางทันที
+  if (state.selected && state.selected !== id) showDirections();
+  const detailDialog = $("#detail-dialog");
+
+  if (detailDialog && detailDialog.open) {
+    closeDetailDialog();
+  }
+}
+
+export function clearOrigin() {
+  originBoothId = null;
+  pickingOrigin = false;
+  document.body.classList.remove("picking-origin");
+  $("#pick-origin")?.classList.remove("active");
+  $("#origin-pin")?.replaceChildren();
+  toast(
+    state.lang === "lo" ? "ລ້າງຈຸດເລີ່ມຕົ້ນແລ້ວ" : "Starting point cleared",
+  );
+}
+
+function startPickingOrigin() {
+  pickingOrigin = true;
+  document.body.classList.add("picking-origin");
+  $("#pick-origin")?.classList.add("active");
+  toast(
+    state.lang === "lo"
+      ? "ແຕະບູທທີ່ໃກ້ທ່ານທີ່ສຸດ"
+      : "Tap the booth nearest to you",
+  );
+}
+
 export function setupUIEventListeners() {
   const brand = document.querySelector(".brand");
   if (brand) {
@@ -835,6 +907,15 @@ export function setupUIEventListeners() {
     }
   });
 
+  $("#pick-origin")?.addEventListener("click", () => {
+    pickingOrigin
+      ? ((pickingOrigin = false),
+        document.body.classList.remove("picking-origin"),
+        $("#pick-origin").classList.remove("active"))
+      : startPickingOrigin();
+  });
+  $("#clear-origin")?.addEventListener("click", clearOrigin);
+
   ["#desktop-detail", "#mobile-detail"].forEach((selector) => {
     const el = $(selector);
     if (el) {
@@ -866,6 +947,8 @@ export function setupUIEventListeners() {
           const gallery = target.closest(".detail-gallery");
           if (gallery) openLightbox(gallery);
         }
+
+        if (action === "set-origin") setOrigin(state.selected);
       });
     }
   });

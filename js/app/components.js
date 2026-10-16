@@ -230,6 +230,16 @@ export function injectMainContent() {
           <option value="Plants" data-i18n="catPlants">Plants</option>
           <option value="Other" data-i18n="catOther">Other</option>
         </select>
+        <div class="origin-controls" aria-label="Location controls">
+          <button id="pick-origin" class="origin-button" type="button">
+            <span aria-hidden="true">⌖</span>
+            <span>I'm here</span>
+          </button>
+          <button id="clear-origin" class="origin-clear-button" type="button" aria-label="Clear starting point" title="Clear starting point">
+            <span aria-hidden="true">×</span>
+            <span>Clear</span>
+          </button>
+        </div>
         <!-- <button class="reset-filter" id="reset-all" data-i18n="resetFilter" >
           Reset Filter
          </button> -->
@@ -267,6 +277,7 @@ export function injectMainContent() {
               </g>
 
               <g id="gates"></g>
+              <g id="origin-pin" pointer-events="none"></g>
             </g>
           </svg>
           <div class="map-loading" id="map-loading" role="status" aria-live="polite" hidden>
@@ -277,18 +288,19 @@ export function injectMainContent() {
 
 
     <div class="map-bottom">
-
-  <!--<div class="legend">
-    <span>
-      <i class="legend-dot"></i>
-      <span data-i18n="entranceLegend">Entrance</span>
-    </span>
-
-    <span>
-      <i class="legend-dot exit"></i>
-      <span data-i18n="exitLegend">Exit</span>
-    </span>
-  </div> -->
+  <div class="map-bottom-left">
+    <div class="route-legend" aria-label="Map marker legend">
+      <span>
+        <i class="route-marker origin" aria-hidden="true"></i>
+        
+        <span data-i18n="originLegend">My location</span>
+      </span>
+      <span>
+        <i class="route-marker destination" aria-hidden="true"></i>
+        <span data-i18n="destinationLegend">Destination</span>
+      </span>
+    </div>
+  </div>
          
   <div class="map-actions">
 
@@ -332,7 +344,7 @@ export function injectMainContent() {
 </div> 
       </div>
 
-<p class="route-notice" id="route-notice"></p>
+    <!--<p class="route-notice" id="route-notice"></p> -->
     </section>
 
     <!-- Booth detail panel (right / desktop only) -->

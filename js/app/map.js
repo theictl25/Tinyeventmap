@@ -1357,11 +1357,17 @@ export function setupMapInteractions() {
     const height = viewport.clientHeight;
 
     const size = mapSize();
+    // Preserve an intentional zoom, but keep a fitted map fitted when a
+    // device rotates or the browser window changes size.
+    const wasFitted =
+      state.minScale > 0 && Math.abs(state.scale / state.minScale - 1) < 0.01;
     state.minScale = Math.min(width / size.width, height / size.height) * 0.95;
 
     state.maxScale = state.minScale * MAP_CONFIG.maxScaleMultiplier;
 
-    state.scale = clamp(state.scale, state.minScale, state.maxScale);
+    state.scale = wasFitted
+      ? state.minScale
+      : clamp(state.scale, state.minScale, state.maxScale);
 
     constrain();
     paint();

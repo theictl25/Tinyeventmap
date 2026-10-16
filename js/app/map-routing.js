@@ -255,25 +255,72 @@ function directFallback(entrances, booth) {
   );
 }
 
-/**
- * Finds a route from the nearest entrance to a booth.
- *
- * @returns {{entrance: number, points: Array<{x:number,y:number}>, length:number, followsWalkway:boolean}|null}
- */
-export function findRouteToBooth(booth) {
-  const layout = getMapLayout();
-  const entrances = layout.elements.filter(
-    (element) => element.type === "entrance",
-  );
-  const walkways = layout.elements.filter(
-    (element) => element.type === "walkway",
+// ---- เพิ่มฟังก์ชันนี้ก่อน findRouteToBooth ----
+
+function routeFromPoint(start, target, segments) {
+  const targetConnection = nearestWalkwayPoint(target, segments);
+  addSegmentNode(targetConnection.segment, targetConnection.point);
+
+  const startConnection = nearestWalkwayPoint(start, segments);
+  addSegmentNode(startConnection.segment, startConnection.point);
+
+  const routeGraph = createGraph(segments);
+  const startId = routeGraph.addNode(startConnection.point);
+  const targetId = routeGraph.addNode(targetConnection.point);
+  const route = shortestPath(routeGraph, startId, targetId);
+  if (!route) return null;
+
+  const points = [start, ...route.points, target].filter(
+    (location, i, all) => i === 0 || !samePoint(location, all[i - 1]),
   );
 
+  return {
+    points,
+    length: startConnection.length + route.length + targetConnection.length,
+    followsWalkway: true,
+  };
+}
+
+function directFromPoint(start, target) {
+  const bend = point(start.x, target.y);
+  return {
+    points: [start, bend, target],
+    length: distance(start, bend) + distance(bend, target),
+    followsWalkway: false,
+  };
+}
+
+/**
+ * @param {object} booth   บูทปลายทาง
+ * @param {object} [origin] บูทหรือพิกัด {x,y} ที่ใช้เป็นจุดเริ่ม (ถ้าไม่ส่ง = ใช้ทางเข้าใกล้สุด)
+ */
+export function findRouteToBooth(booth, origin = null) {
+  const layout = getMapLayout();
+  const entrances = layout.elements.filter((e) => e.type === "entrance");
+  const walkways = layout.elements.filter((e) => e.type === "walkway");
+  const target = elementCenter(booth);
+
+  // ---- โหมดใหม่: เริ่มจากบูทที่ผู้ใช้เลือก ----
+  if (origin) {
+    const start =
+      origin.width !== undefined
+        ? elementCenter(origin)
+        : point(origin.x, origin.y);
+
+    if (!walkways.length) {
+      return { entrance: null, ...directFromPoint(start, target) };
+    }
+    const segments = walkways.map(walkwaySegment);
+    const route =
+      routeFromPoint(start, target, segments) || directFromPoint(start, target);
+    return { entrance: null, ...route };
+  }
+
+  // ---- โหมดเดิม (ไม่เปลี่ยน) ----
   if (!entrances.length) return null;
   if (!walkways.length) return directFallback(entrances, booth);
 
   const segments = walkways.map(walkwaySegment);
-  const target = elementCenter(booth);
   const targetConnection = nearestWalkwayPoint(target, segments);
   addSegmentNode(targetConnection.segment, targetConnection.point);
 
@@ -283,18 +330,14 @@ export function findRouteToBooth(booth) {
       const entranceConnection = nearestWalkwayPoint(start, segments);
       addSegmentNode(entranceConnection.segment, entranceConnection.point);
 
-      // Nodes added after graph creation need to be linked by rebuilding the
-      // small walkway graph. This keeps the algorithm simple and predictable.
       const routeGraph = createGraph(segments);
       const routeStartId = routeGraph.addNode(entranceConnection.point);
       const routeTargetId = routeGraph.addNode(targetConnection.point);
       const route = shortestPath(routeGraph, routeStartId, routeTargetId);
-
       if (!route) return null;
 
       const points = [start, ...route.points, target].filter(
-        (location, pointIndex, all) =>
-          pointIndex === 0 || !samePoint(location, all[pointIndex - 1]),
+        (location, i, all) => i === 0 || !samePoint(location, all[i - 1]),
       );
 
       return {
@@ -308,7 +351,7 @@ export function findRouteToBooth(booth) {
     .filter(Boolean);
 
   return (
-    candidates.sort((first, second) => first.length - second.length)[0] ||
+    candidates.sort((a, b) => a.length - b.length)[0] ||
     directFallback(entrances, booth)
   );
 }
