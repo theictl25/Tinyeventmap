@@ -85,7 +85,7 @@ export function renderHeader() {
         </span>
         <div>
           <h1 id="event-name">EVENT MAP</h1>
-<p id="event-date"></p>
+          <p id="event-date"></p>
         </div>
       </a>
 

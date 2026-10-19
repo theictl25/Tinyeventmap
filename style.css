@@ -1200,13 +1200,6 @@ dialog.lightbox.single .lightbox-counter {
   display: none;
 }
 
-@media (max-width: 639px) {
-  .lightbox-nav {
-    width: 38px;
-    height: 38px;
-  }
-}
-
 /* Icon */
 .icon.fb-logo {
   fill: none;
@@ -1391,6 +1384,67 @@ footer {
   font-size: 12px;
 }
 
+
+
+@media (prefers-reduced-motion: reduce) {
+
+  *,
+  *::before,
+  *::after {
+    transition: none !important;
+    animation: none !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* ========================================
+Navigation: ซ่อนเป็นค่าเริ่มต้น
+======================================== */
+
+/* .navigation {
+  display: none;
+} */
+
+.navigation .nav-button {
+  text-decoration: none;
+}
+
+/* ========================================
+All Booths page
+======================================== */
+
+.booths-page .map-shell,
+.booths-page #route-notice {
+  display: none;
+}
+
+.booths-page .layout {
+  grid-template-columns: minmax(0, 1fr);
+  align-items: start;
+}
+
+.booths-page .map-column {
+  order: 0;
+  grid-column: 1 / -1;
+}
+
+.booths-page .directory {
+  order: 1;
+  height: auto;
+  min-height: 0;
+}
+
+.booths-page .directory-list {
+  grid-template-columns: minmax(0, 1fr);
+  max-height: none;
+  overflow: visible;
+}
+
+.booths-page .desktop-detail {
+  order: 2;
+}
+
+
 /* Mobile bottom navigation */
 @media (max-width: 639px) {
 
@@ -1476,17 +1530,18 @@ footer {
     min-height: auto;
 
     padding: 9px 10px;
-
     gap: 8px;
   }
 
   .map-bottom-left {
     gap: 6px;
+
   }
 
   .route-legend {
     gap: 8px;
     font-size: 10px;
+    flex-direction: column;
   }
 
 
@@ -1532,7 +1587,20 @@ footer {
     min-width: 40px;
     font-size: 10px;
   }
+    .lightbox-nav {
+    width: 38px;
+    height: 38px;
+  }
 }
+
+
+
+@media (min-width: 1400px) {
+  .layout {
+    grid-template-columns: 260px minmax(0, 1fr) 270px;
+  }
+}
+
 
 @media (min-width: 1100px) {
   .layout {
@@ -1634,83 +1702,45 @@ footer {
     width: 40px;
     height: 40px;
   }
-}
+  
 
-@media (min-width: 1400px) {
-  .layout {
-    grid-template-columns: 260px minmax(0, 1fr) 270px;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-
-  *,
-  *::before,
-  *::after {
-    transition: none !important;
-    animation: none !important;
-    scroll-behavior: auto !important;
-  }
-}
-
-/* ========================================
-Navigation: ซ่อนเป็นค่าเริ่มต้น
-======================================== */
-
-/* .navigation {
-  display: none;
-} */
-
-.navigation .nav-button {
-  text-decoration: none;
-}
-
-/* ========================================
-All Booths page
-======================================== */
-
-/* แสดงช่องค้นหาและตัวกรอง แต่ซ่อนตัวแผนผัง */
-.booths-page .map-shell,
-.booths-page #route-notice {
-  display: none;
-}
-
-.booths-page .layout {
-  grid-template-columns: minmax(0, 1fr);
-  align-items: start;
-}
-
-.booths-page .map-column {
-  order: 0;
-  grid-column: 1 / -1;
-}
-
-.booths-page .directory {
-  order: 1;
-  height: auto;
-  min-height: 0;
-}
-
-.booths-page .directory-list {
-  grid-template-columns: minmax(0, 1fr);
-  max-height: none;
-  overflow: visible;
-}
-
-.booths-page .desktop-detail {
-  order: 2;
-}
-
-/* จอใหญ่ของหน้า All Booths:
-รายการด้านซ้าย รายละเอียดด้านขวา */
-@media (min-width: 1100px) {
 
   .booths-page .layout {
-    grid-template-columns: minmax(0, 1fr) 310px;
+    grid-template-columns: minmax(0, 1fr) 340px;
+    grid-template-rows: auto 1fr;
+    align-items: start;
+  }
+
+  /* search + filter อยู่แถวบน เต็มความกว้าง */
+  .booths-page .map-column {
+    grid-column: 1 / -1;
+    grid-row: 1;
+  }
+
+  /* list อยู่ซ้าย แถวที่ 2 */
+  .booths-page .directory {
+    grid-column: 1;
+    grid-row: 2;
+    order: 0;
+    height: auto;
   }
 
   .booths-page .directory-list {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+    max-height: none;
+    overflow: visible;
+  }
+
+  /* detail อยู่ขวา แถวที่ 2 ติดหน้าจอตอนเลื่อน */
+  .booths-page .desktop-detail {
+    display: block;
+    grid-column: 2;
+    grid-row: 2;
+    order: 0;
+    position: sticky;
+    top: 16px;
+    height: calc(100dvh - 40px);
+    overflow-y: auto;
   }
 }
 
