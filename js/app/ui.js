@@ -170,7 +170,7 @@ export function renderList(results) {
     const categoryName = getCategoryName(booth.category);
 
     card.innerHTML = `
-      <span class="shop-logo" style="--logo-bg:${booth.color}">
+      <span class="shop-logo" style="border: 1px solid ${booth.color}">
   <img
     src="${escapeHTML(logo)}"
     alt="${escapeHTML(booth.name)} logo"
@@ -338,7 +338,7 @@ export function detailHTML(booth) {
 
     <div class="detail-body">
       <header class="detail-header">
-        <span class="detail-logo" style="--logo-bg:${booth.color}">
+        <span class="detail-logo" style="border: 1px solid ${booth.color};">
           <img
             src="${escapeHTML(logo)}"
             alt="${escapeHTML(booth.name)} logo"

@@ -121,14 +121,21 @@ p {
   place-items: center;
   width: 39px;
   height: 39px;
-  /* color: white;
-  background: var(--brand); 
+  min-width: 39px;      /* กันไม่ให้ถูกบีบ */
+  aspect-ratio: 1 / 1;  /* รักษาสัดส่วนวงกลม */
+  flex-shrink: 0;       /* ห้ามหดใน flex container */
+  overflow: hidden;     /* ตัดรูปที่ล้นให้อยู่ในวงกลม */
+  color: white;
+  background: var(--bg);
   border-radius: 50%;
-  box-shadow: 0 3px 5px #991b1e20; */
-  object-fit: cover;
+  box-shadow: 0 3px 5px #991b1e20;
 }
+
 .logo {
   width: 100%;
+  height: 100%;
+  object-fit: cover;    /* ถ้าอยากให้เห็นโลโก้ครบทั้งรูป ให้เปลี่ยนเป็น contain */
+  display: block;
 }
 
 .brand h1 {
@@ -485,47 +492,7 @@ p {
   outline-offset: 2px;
 }
 
-@media (max-width: 639px) {
-      .route-marker {
-    width: 11px;
-    height: 16px;
-  }
 
-  .search-toolbar {
-    flex-wrap: wrap;
-  }
-
-  .search-wrap {
-    flex-basis: 100%;
-  }
-
-  .category-select {
-    flex: 1;
-    min-width: 0;
-  }
-
-  .origin-button,
-  .origin-clear-button {
-    min-height: 40px;
-    border-radius: 10px;
-    font-size: 11px;
-  }
-
-  .origin-button {
-    padding: 0 10px;
-  }
-
-
-  .origin-clear-button {
-    width: 40px;
-    justify-content: center;
-    padding: 0;
-  }
-
-  .origin-clear-button span:last-child {
-    display: none;
-  }
-}
 .reset-filter {
   background-color: #fff;
   border: 1px solid var(--border);
@@ -1229,7 +1196,8 @@ body.picking-origin #map-section {
   overflow: hidden;
   border-radius: 14px;
   border: 1px solid #0000000a;
-  background: var(--logo-bg, #f6eee8);
+  /* background: var(--logo-bg, #f6eee8); */
+  background-color: transparent;
 }
 
 .detail-logo img {
@@ -1445,6 +1413,51 @@ All Booths page
 }
 
 
+@media (max-width: 639px) {
+      .route-marker {
+    width: 11px;
+    height: 16px;
+  }
+  .header-inner {
+    padding: 10px 12px;
+    gap: 10px;
+  }
+
+  .search-toolbar {
+    flex-wrap: wrap;
+  }
+
+  .search-wrap {
+    flex-basis: 100%;
+  }
+
+  .category-select {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .origin-button,
+  .origin-clear-button {
+    min-height: 40px;
+    border-radius: 10px;
+    font-size: 11px;
+  }
+
+  .origin-button {
+    padding: 0 10px;
+  }
+
+
+  .origin-clear-button {
+    width: 40px;
+    justify-content: center;
+    padding: 0;
+  }
+
+  .origin-clear-button span:last-child {
+    display: none;
+  }
+}
 /* Mobile bottom navigation */
 @media (max-width: 639px) {
 
