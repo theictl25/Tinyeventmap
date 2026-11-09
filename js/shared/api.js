@@ -66,17 +66,37 @@ export async function loadShopsFromGoogleSheet(onSuccessCallback) {
 
     /*
      * ไม่มี Cache
-     * → โหลดจาก Google Sheet
+     * → ลำดับ 1: โหลดผ่าน Fast Local PHP Cache Endpoint (sub-millisecond)
+     * → ลำดับ 2 (Fallback): โหลดจาก Google Sheet API โดยตรง หากเซิร์ฟเวอร์ Local ใช้งานไม่ได้
      */
-    console.log("Loading EventMap data from Google Sheet...");
+    console.log("Loading EventMap data...");
 
-    const response = await fetch(GOOGLE_SHEET_API);
+    let payload = null;
+    const localCacheUrl = `./api/stats.php?action=getData${isRefresh ? "&refresh=1" : ""}`;
 
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}`);
+    try {
+      const localResponse = await fetch(localCacheUrl, { cache: "no-store" });
+      if (localResponse.ok) {
+        const localData = await localResponse.json();
+        if (localData && !localData.error && (localData.booths || localData.eventInfo)) {
+          payload = localData;
+          console.log("Loaded EventMap data from Local PHP Cache.");
+        }
+      }
+    } catch (localError) {
+      console.debug("Local PHP cache unreachable, falling back to Google Sheet:", localError);
     }
 
-    const payload = await response.json();
+    if (!payload) {
+      console.log("Loading EventMap data directly from Google Sheet (fallback)...");
+      const response = await fetch(GOOGLE_SHEET_API);
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+
+      payload = await response.json();
+    }
 
     /*
      * เอาข้อมูลทั้งหมดเข้า State

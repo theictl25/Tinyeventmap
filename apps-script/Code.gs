@@ -1,6 +1,8 @@
 const WRITE_TOKEN = PropertiesService.getScriptProperties().getProperty(
   "EVENTMAP_WRITE_TOKEN",
 );
+const ROOT_FOLDER_ID = "1Sw4ZGOEq8aA1uCVzw0-kMED0GqGY4bLG";
+const IMAGE_CACHE_KEY = "BOOTH_IMAGES_V1";
 
 function doGet(e) {
   try {
@@ -29,7 +31,7 @@ function doGet(e) {
     }
 
     return jsonResponse({
-      booths: readBooths(boothsSheet),
+      booths: mergeDriveImages_(readBooths(boothsSheet)),
       eventInfo: readEventInfo(eventInfoSheet),
       event: readEvent(eventSheet),
       mapLayout: readMapLayout(),
@@ -86,29 +88,37 @@ function readBooths(sheet) {
   const data = sheet.getDataRange().getDisplayValues();
   if (data.length < 2) return {};
 
-  const columns = indexColumns(data[0]);
+  // ทำให้หัวคอลัมน์ไม่สนตัวพิมพ์เล็กใหญ่
+  const columns = {};
+  data[0].forEach((h, i) => {
+    columns[String(h).trim().toLowerCase()] = i;
+  });
+
   const boothIdColumn = columns.booth_id ?? columns.id;
-  const required = [
-    "name",
-    "category",
-    "description",
-    "hours",
-    "facebook",
-    "logo",
-    "color",
-  ];
-  const missing = required.filter((field) => columns[field] === undefined);
-  if (boothIdColumn === undefined)
+  if (boothIdColumn === undefined) {
     throw new Error('Missing column: "booth_id" or "id"');
-  if (missing.length) throw new Error(`Missing columns: ${missing.join(", ")}`);
+  }
+
+  // บังคับแค่ name กับ category ที่เหลือไม่บังคับ
+  const required = ["name", "category"];
+  const missing = required.filter((f) => columns[f] === undefined);
+  if (missing.length) {
+    throw new Error(`Missing columns: ${missing.join(", ")}`);
+  }
 
   const result = {};
+
   data.slice(1).forEach((row) => {
     const id = String(row[boothIdColumn] || "")
       .trim()
       .toUpperCase();
     if (!id) return;
-    const get = (field) => String(row[columns[field]] || "").trim();
+
+    const get = (field) =>
+      columns[field] === undefined
+        ? ""
+        : String(row[columns[field]] || "").trim();
+
     result[id] = {
       name: get("name"),
       category: get("category"),
@@ -117,8 +127,13 @@ function readBooths(sheet) {
       facebook: get("facebook"),
       logo: get("logo"),
       color: get("color"),
+      images: get("images")
+        .split(/[\n,]+/)
+        .map((s) => s.trim())
+        .filter(Boolean),
     };
   });
+
   return result;
 }
 
@@ -353,4 +368,120 @@ function syncStatsToSheet(online, peak, totalViews) {
   } catch (_) {
     // Non-blocking: Spreadsheet quota or contention must not fail the request
   }
+}
+
+function thumb_(id, size) {
+  return `https://drive.google.com/thumbnail?id=${id}&sz=w${size}`;
+}
+
+// อ่านรูปทั้งหมดจาก Drive -> { C1: [{id,name,type}, ...], ... }
+function scanDriveImages_() {
+  const result = {};
+  const folders = DriveApp.getFolderById(ROOT_FOLDER_ID).getFolders();
+
+  while (folders.hasNext()) {
+    const folder = folders.next();
+    const boothId = folder.getName().trim().toUpperCase();
+    const files = folder.getFiles();
+    const list = [];
+
+    while (files.hasNext()) {
+      const f = files.next();
+      if (!f.getMimeType().startsWith("image/")) continue;
+      list.push({
+        id: f.getId(),
+        name: f.getName(),
+        type: getImageType(f.getName()),
+      });
+    }
+
+    list.sort((a, b) => a.name.localeCompare(b.name));
+    result[boothId] = list;
+  }
+  return result;
+}
+
+// อ่านจาก cache ก่อน (เร็ว) ถ้าไม่มีค่อยไปสแกน Drive
+function getDriveImages_(force) {
+  const cache = CacheService.getScriptCache();
+  if (!force) {
+    const hit = cache.get(IMAGE_CACHE_KEY);
+    if (hit) {
+      try {
+        return JSON.parse(hit);
+      } catch (_) {}
+    }
+  }
+  const data = scanDriveImages_();
+  try {
+    cache.put(IMAGE_CACHE_KEY, JSON.stringify(data), 60);
+  } catch (_) {}
+  return data;
+}
+
+// รวมรูปจาก Drive เข้ากับข้อมูลบูธ
+function mergeDriveImages_(booths) {
+  const drive = getDriveImages_(false);
+
+  Object.keys(booths).forEach((id) => {
+    const booth = booths[id];
+    const files = drive[id] || [];
+    const logo = files.find((f) => f.type === "logo");
+    const photos = files
+      .filter((f) => f.type !== "logo")
+      .map((f) => thumb_(f.id, 1200));
+
+    // Drive ชนะ ถ้าไม่มีรูปใน Drive ค่อยใช้ค่าจากคอลัมน์ในชีตเป็น fallback
+    if (logo) booth.logo = thumb_(logo.id, 400);
+    if (photos.length) booth.images = photos;
+  });
+
+  return booths;
+}
+
+// ---- ตั้งให้อัปเดตอัตโนมัติ ----
+function refreshImages() {
+  getDriveImages_(true);
+}
+
+// รันครั้งเดียวจากหน้า Apps Script
+function setupImageAutoRefresh() {
+  ScriptApp.getProjectTriggers()
+    .filter((t) =>
+      ["refreshImages", "syncBoothImages"].includes(t.getHandlerFunction()),
+    )
+    .forEach((t) => ScriptApp.deleteTrigger(t));
+
+  ScriptApp.newTrigger("refreshImages").timeBased().everyMinutes(5).create();
+}
+
+// เมนูกดรีเฟรชเองทันทีในชีต
+function onOpen() {
+  SpreadsheetApp.getUi()
+    .createMenu("EventMap")
+    .addItem("Refresh booth images", "refreshImages")
+    .addToUi();
+}
+
+// ตรวจว่าโฟลเดอร์ไหนไม่ตรงกับบูธ (ดูผลที่ View → Logs)
+function checkImageFolders() {
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Booths");
+  const ids = Object.keys(readBooths(sheet));
+  const drive = getDriveImages_(true);
+  Object.keys(drive).forEach((id) => {
+    if (!ids.includes(id)) Logger.log("โฟลเดอร์ไม่ตรงกับบูธใด: " + id);
+  });
+  ids.forEach((id) => {
+    if (!drive[id]) Logger.log("บูธยังไม่มีโฟลเดอร์รูป: " + id);
+  });
+}
+
+function getImageType(fileName) {
+  const name = fileName.toLowerCase();
+
+  if (name.includes("logo") || name.includes("profile")) {
+    return "logo";
+  }
+
+  return "image";
 }

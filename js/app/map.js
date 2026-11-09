@@ -50,6 +50,11 @@ export function addBooth(
   const defaultName = id;
   const DEFAULT_LOGO = new URL("./assets/default_logo.png", document.baseURI)
     .href;
+  const rawLogo = String(shop?.logo ?? "").trim();
+  const hasCustomLogo = Boolean(
+    rawLogo && !rawLogo.includes("default_logo.png") && rawLogo !== DEFAULT_LOGO,
+  );
+
   booths.push({
     id,
     mapLabel: String(mapLabel || id).trim(),
@@ -61,7 +66,8 @@ export function addBooth(
     shape,
     name: shop?.name || defaultName,
     category: shop?.category || "Other",
-    logo: String(shop?.logo ?? "").trim() || DEFAULT_LOGO,
+    logo: rawLogo || DEFAULT_LOGO,
+    customLogo: hasCustomLogo ? rawLogo : "",
     images: Array.isArray(shop?.images) ? shop.images : [],
     color,
     fontSize,
@@ -498,7 +504,32 @@ export function renderMap(applyFiltersCb) {
         stroke: "#64748b",
       }),
     );
-    if (textElement) {
+    if (booth.customLogo) {
+      const pad = Math.max(2, Math.min(4, Math.floor(Math.min(booth.width, booth.height) * 0.08)));
+      const mapLogoUrl = booth.customLogo.includes("drive.google.com")
+        ? booth.customLogo.replace(/sz=w\d+/, "sz=w160")
+        : booth.customLogo;
+
+      const imageElement = svgElement("image", {
+        href: mapLogoUrl,
+        x: booth.x + pad,
+        y: booth.y + pad,
+        width: Math.max(1, booth.width - pad * 2),
+        height: Math.max(1, booth.height - pad * 2),
+        preserveAspectRatio: "xMidYMid meet",
+        class: "booth-logo",
+      });
+
+      // Fallback to text label if logo image fails to load
+      imageElement.addEventListener("error", () => {
+        imageElement.remove();
+        if (textElement && !group.contains(textElement)) {
+          group.append(textElement);
+        }
+      });
+
+      group.append(imageElement);
+    } else if (textElement) {
       group.append(textElement);
     }
 

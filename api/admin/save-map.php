@@ -127,4 +127,10 @@ if (empty($decoded['ok'])) {
   respond(500, ['ok' => false, 'error' => $decoded['error'] ?? 'Google Sheets did not save the map']);
 }
 
+// Invalidate cached event data so public users immediately see the saved layout
+$cacheFile = dirname(__DIR__, 2) . '/data/cache_eventmap.json';
+if (is_file($cacheFile)) {
+  @unlink($cacheFile);
+}
+
 respond(200, ['ok' => true]);

@@ -57,6 +57,12 @@ if ($sid === '' && $action === 'ping') {
     ]);
 }
 
+if ($action === 'getData' || $action === 'getShops') {
+    $forceRefresh = isset($_GET['refresh']) && ($_GET['refresh'] === '1' || $_GET['refresh'] === 'true');
+    output_eventmap_cached_data($forceRefresh);
+    exit;
+}
+
 if ($action === 'ping' || $action === 'leave') {
     $result = record_visitor_ping($sid, $action);
     echo json_encode($result, JSON_UNESCAPED_UNICODE);

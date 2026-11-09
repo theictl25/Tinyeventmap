@@ -164,6 +164,7 @@ export function renderList(results) {
     card.dataset.id = booth.id;
     card.classList.toggle("selected", booth.id === state.selected);
     card.setAttribute("aria-pressed", String(booth.id === state.selected));
+    card.title = booth.name;
 
     const boothText =
       state.lang === "lo" ? `ບູທ ${booth.id}` : `Booth ${booth.id}`;
@@ -179,7 +180,7 @@ export function renderList(results) {
   >
 </span>
       <span class="shop-text">
-        <span class="shop-title">
+        <span class="shop-title" title="${escapeHTML(booth.name)}">
           <span class="small-badge">${booth.id}</span>
           ${escapeHTML(booth.name)}
         </span>

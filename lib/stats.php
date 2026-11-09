@@ -188,3 +188,150 @@ function record_visitor_ping(string $sid, string $action = 'ping'): array
     fclose($fp);
     return get_visitor_stats();
 }
+
+function eventmap_cache_file(): string
+{
+    $dataDir = dirname(__DIR__) . DIRECTORY_SEPARATOR . 'data';
+    if (is_dir($dataDir) && is_writable($dataDir)) {
+        return $dataDir . DIRECTORY_SEPARATOR . 'cache_eventmap.json';
+    }
+    return sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'cache_eventmap.json';
+}
+
+function clear_eventmap_cached_data(): void
+{
+    $file = eventmap_cache_file();
+    if (is_file($file)) {
+        @unlink($file);
+    }
+}
+
+function output_eventmap_cached_data(bool $forceRefresh = false): void
+{
+    $cacheFile = eventmap_cache_file();
+    $cacheTtl = 300; // 5 minutes
+    $now = time();
+
+    $cacheExists = is_file($cacheFile);
+    $cacheAge = $cacheExists ? ($now - (int)filemtime($cacheFile)) : 999999;
+    $cacheValid = $cacheExists && ($cacheAge < $cacheTtl);
+
+    // Throttling for refresh to protect upstream Google Sheet quota
+    if ($forceRefresh && $cacheExists && $cacheAge < 15) {
+        $cacheValid = true;
+    }
+
+    if ($cacheValid && !$forceRefresh) {
+        header('X-Cache: HIT');
+        header('X-Cache-Age: ' . $cacheAge);
+        header('Cache-Control: public, max-age=60');
+        $content = @file_get_contents($cacheFile);
+        if ($content !== false && $content !== '') {
+            echo $content;
+            exit;
+        }
+    }
+
+    // Load Apps Script URL from config
+    $configFile = dirname(__DIR__) . DIRECTORY_SEPARATOR . 'config.php';
+    $config = is_file($configFile) ? (require $configFile) : [];
+    $gasUrl = $config['apps_script_write_url']
+        ?? 'https://script.google.com/macros/s/AKfycbyp6sGnYVMorD19sv47KpBCKQ5mu1DlQbSKH-EOhF8jr3r4Waz2AOPMwDzG-DJ7mktO/exec';
+
+    $fetchGas = static function (string $url): ?string {
+        // Try cURL first if available
+        if (function_exists('curl_init')) {
+            $ch = curl_init($url);
+            curl_setopt_array($ch, [
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_FOLLOWLOCATION => true,
+                CURLOPT_MAXREDIRS => 5,
+                CURLOPT_TIMEOUT => 20,
+                CURLOPT_HTTPHEADER => ['Accept: application/json'],
+                CURLOPT_USERAGENT => 'EventMap-Cache/1.0',
+                CURLOPT_SSL_VERIFYPEER => true,
+            ]);
+            $response = curl_exec($ch);
+            $httpCode = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
+
+            if ($response === false && curl_errno($ch) === 60 /* CURLE_PEER_FAILED_VERIFICATION */) {
+                curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+                curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, 0);
+                $response = curl_exec($ch);
+                $httpCode = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            }
+
+            if ($response !== false && $httpCode >= 200 && $httpCode < 300) {
+                return (string)$response;
+            }
+        }
+
+        // Fallback to stream context if OpenSSL is loaded
+        if (extension_loaded('openssl')) {
+            $makeContext = static function (bool $verify) {
+                return stream_context_create([
+                    'http' => [
+                        'method' => 'GET',
+                        'timeout' => 20,
+                        'follow_location' => 1,
+                        'max_redirects' => 5,
+                        'header' => "User-Agent: EventMap-Cache/1.0\r\nAccept: application/json\r\n",
+                        'ignore_errors' => true,
+                    ],
+                    'ssl' => [
+                        'verify_peer' => $verify,
+                        'verify_peer_name' => $verify,
+                    ],
+                ]);
+            };
+
+            $response = @file_get_contents($url, false, $makeContext(true));
+            if ($response === false) {
+                $response = @file_get_contents($url, false, $makeContext(false));
+            }
+
+            if ($response !== false && $response !== '') {
+                return $response;
+            }
+        }
+
+        return null;
+    };
+
+    $freshData = $fetchGas($gasUrl);
+
+    if ($freshData !== null && $freshData !== '') {
+        $decoded = json_decode($freshData, true);
+        if (is_array($decoded) && empty($decoded['error']) && (!empty($decoded['booths']) || !empty($decoded['eventInfo']))) {
+            $tmpFile = $cacheFile . '.' . bin2hex(random_bytes(4)) . '.tmp';
+            if (@file_put_contents($tmpFile, $freshData, LOCK_EX) !== false) {
+                @rename($tmpFile, $cacheFile);
+            }
+
+            header('X-Cache: MISS');
+            header('Cache-Control: public, max-age=60');
+            echo $freshData;
+            exit;
+        }
+    }
+
+    // Serve stale cache if upstream fetch failed
+    if ($cacheExists) {
+        $staleContent = @file_get_contents($cacheFile);
+        if ($staleContent !== false && $staleContent !== '') {
+            header('X-Cache: STALE');
+            header('X-Cache-Warning: Upstream unreachable, served stale cache');
+            header('Cache-Control: public, max-age=30');
+            echo $staleContent;
+            exit;
+        }
+    }
+
+    http_response_code(502);
+    echo json_encode([
+        'ok' => false,
+        'fallback' => true,
+        'error' => 'Unable to fetch data from upstream and no cache available',
+    ], JSON_UNESCAPED_UNICODE);
+    exit;
+}

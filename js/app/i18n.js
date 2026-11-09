@@ -61,7 +61,8 @@ export const translations = {
     linkCopied: "ຄັດລອກລິ້ງບູທແລ້ວ.",
     promptCopy: "ຄັດລອກລາຍລະອຽດບູທ:",
     promptCopyLink: "ຄັດລອກລິ້ງບູທນີ້:",
-    footerText: (count) => `EventMap · ${count} ຕຳແໜ່ງບູທ · ລະບົບແນະນຳບູທ`,
+    footerText: `© 2026 ICTLao Software Solution Sole Co., Ltd. All Rights Reserved.`,
+    footerPoweredBy: ` Powered by ICTLao Software Solution`,
     defaultDesc: "ຍັງບໍ່ທັນມີຂໍ້ມູນລາຍລະອຽດຮ້ານເທື່ອ.",
     defaultHours: "ບໍ່ໄດ້ລະບຸເວລາເປີດ-ປິດ",
     resetFilter: "ລ້າງຕົວກອງ",
@@ -125,8 +126,10 @@ export const translations = {
     linkCopied: "Booth link copied.",
     promptCopy: "Copy booth details. Host this page online to share a link:",
     promptCopyLink: "Copy this booth link:",
-    footerText: (count) =>
-      `EventMap · ${count} booth locations · Demo event directory`,
+    // footerText: (count) =>
+    //   `EventMap · ${count} booth locations · Demo event directory`,
+    footerText: `© 2026 ICTLao Software Solution Sole Co., Ltd. All Rights Reserved.`,
+    footerPoweredBy: ` Powered by ICTLao Software Solution`,
     defaultDesc: "Shop details have not been published for this booth yet.",
     defaultHours: "Hours not published",
     resetFilter: "Reset Filter",
@@ -208,7 +211,11 @@ export function updateLanguageUI() {
   uiUpdateCallbacks.forEach((cb) => cb());
 
   const footer = $("#footer");
+
   if (footer) {
-    footer.textContent = t("footerText", booths.length);
+    footer.innerHTML = `
+    <span>${t("footerText")}</span>
+    <span class="footer-powered">${t("footerPoweredBy")}</span>
+  `;
   }
 }
