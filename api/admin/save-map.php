@@ -75,16 +75,43 @@ function compact_layout(array $layout): array
     if (!empty($el['shape']) && $el['shape'] !== 'rectangle') {
       $item['shape'] = (string)$el['shape'];
     }
+    if ($type === 'path' && isset($el['points']) && is_array($el['points'])) {
+      $points = [];
+      foreach ($el['points'] as $point) {
+        if (!is_array($point) || !isset($point['x'], $point['y'])) continue;
+        if (!is_numeric($point['x']) || !is_numeric($point['y'])) continue;
+        $points[] = [
+          'x' => round((float)$point['x'], 1),
+          'y' => round((float)$point['y'], 1),
+        ];
+      }
+      if (count($points) >= 2) {
+        $item['points'] = $points;
+      }
+      $item['pathWidth'] = round(max(4, min(120, (float)($el['pathWidth'] ?? 28))), 1);
+    }
     $elements[] = $item;
   }
 
-  return [
+  $result = [
     'width' => (int)($layout['width'] ?? 800),
     'height' => (int)($layout['height'] ?? 900),
     'gridSize' => (int)($layout['gridSize'] ?? 5),
     'zoneColors' => is_array($layout['zoneColors'] ?? null) ? $layout['zoneColors'] : [],
     'elements' => $elements,
   ];
+
+  if (!empty($layout['backgroundImage']) && is_string($layout['backgroundImage'])) {
+    $result['backgroundImage'] = $layout['backgroundImage'];
+  }
+  if (isset($layout['backgroundOpacity'])) {
+    $result['backgroundOpacity'] = max(0.0, min(1.0, (float)$layout['backgroundOpacity']));
+  }
+  if (isset($layout['backgroundLocked'])) {
+    $result['backgroundLocked'] = (bool)$layout['backgroundLocked'];
+  }
+
+  return $result;
 }
 
 $body = json_encode([

@@ -261,6 +261,7 @@ export function injectMainContent() {
 
             <g id="world">
               <rect id="map-background" width="800" height="900" fill="#ffffff" />
+              <image id="map-background-image" x="0" y="0" width="800" height="900" preserveAspectRatio="none" pointer-events="none" hidden />
 
               <g id="zone-labels"></g>
               <g id="map-elements"></g>

@@ -52,7 +52,9 @@ export function addBooth(
     .href;
   const rawLogo = String(shop?.logo ?? "").trim();
   const hasCustomLogo = Boolean(
-    rawLogo && !rawLogo.includes("default_logo.png") && rawLogo !== DEFAULT_LOGO,
+    rawLogo &&
+    !rawLogo.includes("default_logo.png") &&
+    rawLogo !== DEFAULT_LOGO,
   );
 
   booths.push({
@@ -163,6 +165,26 @@ function mapShape(item, attributes) {
     height: item.height,
     rx: 8,
   });
+}
+
+function mapPathData(points) {
+  if (!Array.isArray(points) || points.length < 2) return "";
+  const radius = 18;
+  let d = `M ${points[0].x} ${points[0].y}`;
+  for (let index = 1; index < points.length - 1; index += 1) {
+    const previous = points[index - 1];
+    const current = points[index];
+    const next = points[index + 1];
+    const beforeLength = Math.hypot(current.x - previous.x, current.y - previous.y);
+    const afterLength = Math.hypot(next.x - current.x, next.y - current.y);
+    const before = Math.min(radius, beforeLength / 2);
+    const after = Math.min(radius, afterLength / 2);
+    const start = { x: current.x + ((previous.x - current.x) / Math.max(1, beforeLength)) * before, y: current.y + ((previous.y - current.y) / Math.max(1, beforeLength)) * before };
+    const end = { x: current.x + ((next.x - current.x) / Math.max(1, afterLength)) * after, y: current.y + ((next.y - current.y) / Math.max(1, afterLength)) * after };
+    d += ` L ${start.x} ${start.y} Q ${current.x} ${current.y} ${end.x} ${end.y}`;
+  }
+  const last = points.at(-1);
+  return `${d} L ${last.x} ${last.y}`;
 }
 
 function appendBlossom(group, cx, cy, size) {
@@ -420,8 +442,23 @@ function createItemTextElement({
 
 export function renderMap(applyFiltersCb) {
   const size = mapSize();
+  const layout = getMapLayout();
   $("#map-background")?.setAttribute("width", size.width);
   $("#map-background")?.setAttribute("height", size.height);
+  const backgroundImage = $("#map-background-image");
+  if (backgroundImage) {
+    backgroundImage.setAttribute("width", size.width);
+    backgroundImage.setAttribute("height", size.height);
+    backgroundImage.setAttribute("preserveAspectRatio", "none");
+    backgroundImage.setAttribute("opacity", String(layout.backgroundOpacity));
+    if (layout.backgroundImage) {
+      backgroundImage.setAttribute("href", layout.backgroundImage);
+      backgroundImage.removeAttribute("hidden");
+    } else {
+      backgroundImage.removeAttribute("href");
+      backgroundImage.setAttribute("hidden", "");
+    }
+  }
   $("#zone-labels").replaceChildren();
   $("#map-elements").replaceChildren();
   $("#booth-layer").replaceChildren();
@@ -435,6 +472,18 @@ export function renderMap(applyFiltersCb) {
       const group = svgElement("g", { class: `map-element map-${item.type}` });
       if (item.type === "tree") {
         appendTree(group, item);
+      } else if (item.type === "path") {
+        group.append(
+          svgElement("path", {
+            d: mapPathData(item.points),
+            fill: "none",
+            stroke: item.color,
+            "stroke-width": item.pathWidth,
+            "stroke-linecap": "round",
+            "stroke-linejoin": "round",
+            "pointer-events": "none",
+          }),
+        );
       } else {
         group.append(mapShape(item, { fill: item.color, stroke: "#94a3b8" }));
       }
@@ -447,7 +496,7 @@ export function renderMap(applyFiltersCb) {
             item.type;
       const verticalWalkway =
         item.type === "walkway" && item.height > item.width;
-      const lines = wrapItemLabel(
+      const lines = item.type === "path" ? [] : wrapItemLabel(
         label,
         item.width,
         item.height,
@@ -505,10 +554,15 @@ export function renderMap(applyFiltersCb) {
       }),
     );
     if (booth.customLogo) {
-      const pad = Math.max(2, Math.min(4, Math.floor(Math.min(booth.width, booth.height) * 0.08)));
+      const pad = Math.max(
+        2,
+        Math.min(4, Math.floor(Math.min(booth.width, booth.height) * 0.08)),
+      );
       const mapLogoUrl = booth.customLogo.includes("drive.google.com")
         ? booth.customLogo.replace(/sz=w\d+/, "sz=w160")
-        : booth.customLogo;
+        : booth.customLogo.includes("googleusercontent.com")
+          ? booth.customLogo.replace(/=w\d+.*$/, "=w160")
+          : booth.customLogo;
 
       const imageElement = svgElement("image", {
         href: mapLogoUrl,

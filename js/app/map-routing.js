@@ -51,66 +51,39 @@ function walkwaySegment(walkway, index) {
       };
 }
 
-function inRange(value, first, second) {
-  return (
-    value >= Math.min(first, second) - 0.1 &&
-    value <= Math.max(first, second) + 0.1
-  );
+function pathSegments(path, index) {
+  return path.points.slice(1).map((end, pointIndex) => ({
+    id: `path-${index}-${pointIndex}`,
+    start: path.points[pointIndex],
+    end,
+    nodes: [],
+  }));
 }
 
 function projectOntoSegment(location, segment) {
-  if (segment.horizontal) {
-    return point(
-      Math.max(segment.start.x, Math.min(segment.end.x, location.x)),
-      segment.start.y,
-    );
-  }
-
-  return point(
-    segment.start.x,
-    Math.max(segment.start.y, Math.min(segment.end.y, location.y)),
-  );
+  const dx = segment.end.x - segment.start.x;
+  const dy = segment.end.y - segment.start.y;
+  const lengthSquared = dx * dx + dy * dy;
+  const progress = lengthSquared
+    ? Math.max(0, Math.min(1, ((location.x - segment.start.x) * dx + (location.y - segment.start.y) * dy) / lengthSquared))
+    : 0;
+  return point(segment.start.x + dx * progress, segment.start.y + dy * progress);
 }
 
 function segmentIntersection(first, second) {
-  if (first.horizontal !== second.horizontal) {
-    const horizontal = first.horizontal ? first : second;
-    const vertical = first.horizontal ? second : first;
-    const intersection = point(vertical.start.x, horizontal.start.y);
-
-    return inRange(intersection.x, horizontal.start.x, horizontal.end.x) &&
-      inRange(intersection.y, vertical.start.y, vertical.end.y)
-      ? intersection
-      : null;
+  const r = point(first.end.x - first.start.x, first.end.y - first.start.y);
+  const s = point(second.end.x - second.start.x, second.end.y - second.start.y);
+  const cross = r.x * s.y - r.y * s.x;
+  const offset = point(second.start.x - first.start.x, second.start.y - first.start.y);
+  if (Math.abs(cross) < 0.0001) {
+    return [first.start, first.end, second.start, second.end]
+      .find((candidate) => samePoint(projectOntoSegment(candidate, first), candidate) && samePoint(projectOntoSegment(candidate, second), candidate)) || null;
   }
-
-  // Parallel walkways form a connection only when their centre lines meet.
-  // This avoids treating nearby-but-separate paths as connected.
-  if (first.horizontal && Math.abs(first.start.y - second.start.y) < 0.1) {
-    const left = Math.max(
-      Math.min(first.start.x, first.end.x),
-      Math.min(second.start.x, second.end.x),
-    );
-    const right = Math.min(
-      Math.max(first.start.x, first.end.x),
-      Math.max(second.start.x, second.end.x),
-    );
-    return left <= right ? point((left + right) / 2, first.start.y) : null;
-  }
-
-  if (!first.horizontal && Math.abs(first.start.x - second.start.x) < 0.1) {
-    const top = Math.max(
-      Math.min(first.start.y, first.end.y),
-      Math.min(second.start.y, second.end.y),
-    );
-    const bottom = Math.min(
-      Math.max(first.start.y, first.end.y),
-      Math.max(second.start.y, second.end.y),
-    );
-    return top <= bottom ? point(first.start.x, (top + bottom) / 2) : null;
-  }
-
-  return null;
+  const firstProgress = (offset.x * s.y - offset.y * s.x) / cross;
+  const secondProgress = (offset.x * r.y - offset.y * r.x) / cross;
+  return firstProgress >= -0.001 && firstProgress <= 1.001 && secondProgress >= -0.001 && secondProgress <= 1.001
+    ? point(first.start.x + firstProgress * r.x, first.start.y + firstProgress * r.y)
+    : null;
 }
 
 function addSegmentNode(segment, location) {
@@ -167,8 +140,11 @@ function createGraph(segments) {
   }
 
   segments.forEach((segment) => {
+    const dx = segment.end.x - segment.start.x;
+    const dy = segment.end.y - segment.start.y;
     segment.nodes.sort((first, second) =>
-      segment.horizontal ? first.x - second.x : first.y - second.y,
+      (first.x - segment.start.x) * dx + (first.y - segment.start.y) * dy -
+      ((second.x - segment.start.x) * dx + (second.y - segment.start.y) * dy),
     );
 
     for (let index = 1; index < segment.nodes.length; index += 1) {
@@ -298,6 +274,11 @@ export function findRouteToBooth(booth, origin = null) {
   const layout = getMapLayout();
   const entrances = layout.elements.filter((e) => e.type === "entrance");
   const walkways = layout.elements.filter((e) => e.type === "walkway");
+  const paths = layout.elements.filter((e) => e.type === "path" && e.points?.length >= 2);
+  const segments = [
+    ...walkways.map(walkwaySegment),
+    ...paths.flatMap(pathSegments),
+  ];
   const target = elementCenter(booth);
 
   // ---- โหมดใหม่: เริ่มจากบูทที่ผู้ใช้เลือก ----
@@ -307,10 +288,9 @@ export function findRouteToBooth(booth, origin = null) {
         ? elementCenter(origin)
         : point(origin.x, origin.y);
 
-    if (!walkways.length) {
+    if (!segments.length) {
       return { entrance: null, ...directFromPoint(start, target) };
     }
-    const segments = walkways.map(walkwaySegment);
     const route =
       routeFromPoint(start, target, segments) || directFromPoint(start, target);
     return { entrance: null, ...route };
@@ -318,9 +298,7 @@ export function findRouteToBooth(booth, origin = null) {
 
   // ---- โหมดเดิม (ไม่เปลี่ยน) ----
   if (!entrances.length) return null;
-  if (!walkways.length) return directFallback(entrances, booth);
-
-  const segments = walkways.map(walkwaySegment);
+  if (!segments.length) return directFallback(entrances, booth);
   const targetConnection = nearestWalkwayPoint(target, segments);
   addSegmentNode(targetConnection.segment, targetConnection.point);
 

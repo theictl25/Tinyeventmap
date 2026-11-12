@@ -75,6 +75,31 @@ $initialStats = get_visitor_stats();
                 <span data-manager-i18n="grid">Grid</span>
                 <input id="grid-size" type="number" min="5">
             </label>
+            <section class="manager-background-settings" aria-labelledby="background-settings-title">
+                <h3 id="background-settings-title" data-manager-i18n="backgroundImage">Map background</h3>
+                <label>
+                    <span data-manager-i18n="backgroundImageUrl">Background image URL</span>
+                    <input id="background-image-url" type="text" inputmode="url" placeholder="https://example.com/floor-plan.png">
+                </label>
+                <label class="background-file-picker">
+                    <span data-manager-i18n="chooseBackgroundImage">Choose small image</span>
+                    <input id="background-image-file" type="file" accept="image/png,image/jpeg,image/webp">
+                </label>
+                <label>
+                    <span data-manager-i18n="backgroundOpacity">Opacity</span>
+                    <input id="background-opacity" type="range" min="0" max="100" step="1">
+                    <output id="background-opacity-value">35%</output>
+                </label>
+                <label class="background-lock">
+                    <input id="background-locked" type="checkbox" checked>
+                    <span data-manager-i18n="lockBackground">Lock background</span>
+                </label>
+                <div class="background-actions">
+                    <button class="button" id="fit-background" type="button" data-manager-i18n="fitBackground">Fit to map</button>
+                    <button class="button" id="remove-background" type="button" data-manager-i18n="removeBackground">Remove background</button>
+                </div>
+                <p id="background-help" data-manager-i18n="backgroundHelp">Use an image URL for a permanent background.</p>
+            </section>
             <button class="button primary" id="save-map" type="button" data-manager-i18n="saveForEveryone">
                 Save for everyone
             </button>

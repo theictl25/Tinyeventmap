@@ -17,10 +17,14 @@ export const DEFAULT_ZONE_COLORS = {
   D: "#e1f2ff",
 };
 export const DEFAULT_NEW_ZONE_COLOR = "#e9d5ff";
+const MAX_EMBEDDED_BACKGROUND_LENGTH = 16000;
 
 export const ELEMENT_TYPES = {
   booth: { color: "#ffebee", width: 70, height: 48 },
   walkway: { color: "#f1f5f9", width: 220, height: 45 },
+  // New walkways are drawn with the Path Editor. The older rectangular
+  // `walkway` type remains supported so saved event maps stay compatible.
+  path: { color: "#f1f5f9", width: 200, height: 40 },
   entrance: { color: "#dcfce7", width: 90, height: 42 },
   exit: { color: "#ffe4e6", width: 90, height: 42 },
   tree: { color: "#2A7E19", width: 44, height: 44 },
@@ -139,6 +143,21 @@ function positiveNumber(value, fallback) {
   return Number.isFinite(number) && number > 0 ? number : fallback;
 }
 
+function normalizeBackgroundImage(value) {
+  const source = String(value || "").trim();
+  if (!source) return "";
+  if (/^data:image\/(png|jpeg|webp);base64,/i.test(source)) {
+    return source.length <= MAX_EMBEDDED_BACKGROUND_LENGTH ? source : "";
+  }
+  if (source.length > 2048) return "";
+  try {
+    const url = new URL(source);
+    return /^https?:$/.test(url.protocol) ? url.href : "";
+  } catch {
+    return "";
+  }
+}
+
 function normalizeZoneColors(sourceColors, elements) {
   const colors = { ...DEFAULT_ZONE_COLORS };
   Object.entries(sourceColors || {}).forEach(([zone, color]) => {
@@ -160,6 +179,32 @@ function normalizeZoneColors(sourceColors, elements) {
   return colors;
 }
 
+function normalizePathPoints(points, fallback, width, height) {
+  const source = Array.isArray(points) ? points : [];
+  const normalized = source
+    .map((point) => ({ x: Number(point?.x), y: Number(point?.y) }))
+    .filter((point) => Number.isFinite(point.x) && Number.isFinite(point.y));
+  if (normalized.length >= 2) return normalized;
+  return [
+    { x: fallback.x, y: fallback.y + height / 2 },
+    { x: fallback.x + width, y: fallback.y + height / 2 },
+  ];
+}
+
+function pathBounds(points, fallback) {
+  const xs = points.map((point) => point.x);
+  const ys = points.map((point) => point.y);
+  const x = Math.min(...xs);
+  const y = Math.min(...ys);
+  return {
+    x,
+    y,
+    width: Math.max(1, Math.max(...xs) - x),
+    height: Math.max(1, Math.max(...ys) - y),
+    ...fallback,
+  };
+}
+
 /**
  * Makes an individual element safe for rendering without changing its
  * external schema. Unknown element types become "other".
@@ -168,6 +213,18 @@ function normalizeElement(element, index) {
   const type = ELEMENT_TYPES[element?.type] ? element.type : "other";
   const defaults = ELEMENT_TYPES[type];
 
+  const fallback = {
+    x: Math.max(0, Number(element?.x) || 0),
+    y: Math.max(0, Number(element?.y) || 0),
+  };
+  const width = positiveNumber(element?.width, defaults.width);
+  const height = positiveNumber(element?.height, defaults.height);
+  const points =
+    type === "path"
+      ? normalizePathPoints(element?.points, fallback, width, height)
+      : undefined;
+  const bounds = type === "path" ? pathBounds(points, {}) : {};
+
   return {
     id: String(element?.id || type + "-" + (index + 1)),
     type,
@@ -175,10 +232,10 @@ function normalizeElement(element, index) {
     zone: String(element?.zone || ""),
     label_lo: String(element?.label_lo || ""),
     label_en: String(element?.label_en || ""),
-    x: Math.max(0, Number(element?.x) || 0),
-    y: Math.max(0, Number(element?.y) || 0),
-    width: positiveNumber(element?.width, defaults.width),
-    height: positiveNumber(element?.height, defaults.height),
+    x: type === "path" ? bounds.x : fallback.x,
+    y: type === "path" ? bounds.y : fallback.y,
+    width: type === "path" ? bounds.width : width,
+    height: type === "path" ? bounds.height : height,
     color: String(element?.color || defaults.color),
     fontSize: Math.min(72, Math.max(6, positiveNumber(element?.fontSize, 12))),
     textColor: /^#[0-9a-f]{6}$/i.test(String(element?.textColor || ""))
@@ -189,6 +246,15 @@ function normalizeElement(element, index) {
     shape: ELEMENT_SHAPES.includes(element?.shape)
       ? element.shape
       : "rectangle",
+    ...(type === "path"
+      ? {
+          points,
+          pathWidth: Math.min(
+            120,
+            Math.max(4, positiveNumber(element?.pathWidth, 28)),
+          ),
+        }
+      : {}),
   };
 }
 
@@ -208,6 +274,12 @@ export function normalizeMapLayout(value) {
     width: positiveNumber(source.width, fallback.width),
     height: positiveNumber(source.height, fallback.height),
     gridSize: positiveNumber(source.gridSize, fallback.gridSize),
+    backgroundImage: normalizeBackgroundImage(source.backgroundImage),
+    backgroundOpacity: Math.min(
+      1,
+      Math.max(0, Number.isFinite(Number(source.backgroundOpacity)) ? Number(source.backgroundOpacity) : 0.35),
+    ),
+    backgroundLocked: source.backgroundLocked !== false,
     zoneColors: normalizeZoneColors(source?.zoneColors, normalizedElements),
     elements: normalizedElements,
   };
@@ -235,6 +307,9 @@ export function compactMapLayout(layout) {
     width: normalized.width,
     height: normalized.height,
     gridSize: normalized.gridSize,
+    backgroundImage: normalized.backgroundImage,
+    backgroundOpacity: normalized.backgroundOpacity,
+    backgroundLocked: normalized.backgroundLocked,
     zoneColors: normalized.zoneColors,
     elements: normalized.elements.map((el) => {
       const item = { id: el.id, type: el.type };
@@ -253,6 +328,13 @@ export function compactMapLayout(layout) {
         item.textColor = el.textColor;
       }
       if (el.shape && el.shape !== "rectangle") item.shape = el.shape;
+      if (el.type === "path") {
+        item.points = el.points.map((point) => ({
+          x: Math.round(Number(point.x) * 10) / 10,
+          y: Math.round(Number(point.y) * 10) / 10,
+        }));
+        item.pathWidth = Math.round(Number(el.pathWidth) * 10) / 10;
+      }
       return item;
     }),
   };

@@ -13,6 +13,37 @@ let originBoothId = null; // บูทที่ผู้ใช้บอกว่
 let pickingOrigin = false; // กำลังอยู่ในโหมดเลือกบูทหรือไม่
 const announce = $("#announcement");
 
+function roundedRoutePath(points) {
+  if (!Array.isArray(points) || points.length < 2) return "";
+
+  const radius = 18;
+  let d = `M ${points[0].x} ${points[0].y}`;
+  for (let index = 1; index < points.length - 1; index += 1) {
+    const previous = points[index - 1];
+    const current = points[index];
+    const next = points[index + 1];
+    const beforeLength = Math.hypot(
+      current.x - previous.x,
+      current.y - previous.y,
+    );
+    const afterLength = Math.hypot(next.x - current.x, next.y - current.y);
+    const before = Math.min(radius, beforeLength / 2);
+    const after = Math.min(radius, afterLength / 2);
+    const start = {
+      x: current.x + ((previous.x - current.x) / Math.max(1, beforeLength)) * before,
+      y: current.y + ((previous.y - current.y) / Math.max(1, beforeLength)) * before,
+    };
+    const end = {
+      x: current.x + ((next.x - current.x) / Math.max(1, afterLength)) * after,
+      y: current.y + ((next.y - current.y) / Math.max(1, afterLength)) * after,
+    };
+    d += ` L ${start.x} ${start.y} Q ${current.x} ${current.y} ${end.x} ${end.y}`;
+  }
+
+  const last = points.at(-1);
+  return `${d} L ${last.x} ${last.y}`;
+}
+
 function getBoothLogo(booth) {
   const defaultLogo = "./assets/default_logo.png";
 
@@ -542,9 +573,7 @@ export function showDirections() {
   if (routePath) {
     routePath.setAttribute(
       "d",
-      route.points
-        .map((point, index) => `${index ? "L" : "M"}${point.x} ${point.y}`)
-        .join(" "),
+      roundedRoutePath(route.points),
     );
   }
 

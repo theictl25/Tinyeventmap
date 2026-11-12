@@ -1,12 +1,25 @@
 :root {
-  --brand: #991b1e;
+  /* --brand: #991b1e;
   --brand-hover: #7e171a;
   --bg: #f5f6fa;
   --surface: #fff;
   --text: #182132;
   --muted: #778196;
   --border: #e3e7ef;
-  --shadow: 0 2px 5px #18213206;
+  --shadow: 0 2px 5px #18213206; */
+  --brand: #df8e14;
+  --brand-hover: #c59448;
+
+  --bg: #faf7f0;
+  --surface: #ffffff;
+
+  --text: #29251f;
+  --muted: #898174;
+
+  --border: #e9e2d6;
+  --border-select: #a76400;
+
+  --shadow: 0 2px 8px #29251f0a;
 }
 
 * {
@@ -121,10 +134,10 @@ p {
   place-items: center;
   width: 39px;
   height: 39px;
-  min-width: 39px;      /* กันไม่ให้ถูกบีบ */
-  aspect-ratio: 1 / 1;  /* รักษาสัดส่วนวงกลม */
-  flex-shrink: 0;       /* ห้ามหดใน flex container */
-  overflow: hidden;     /* ตัดรูปที่ล้นให้อยู่ในวงกลม */
+  min-width: 39px; /* กันไม่ให้ถูกบีบ */
+  aspect-ratio: 1 / 1; /* รักษาสัดส่วนวงกลม */
+  flex-shrink: 0; /* ห้ามหดใน flex container */
+  overflow: hidden; /* ตัดรูปที่ล้นให้อยู่ในวงกลม */
   color: white;
   background: var(--bg);
   border-radius: 50%;
@@ -134,7 +147,7 @@ p {
 .logo {
   width: 100%;
   height: 100%;
-  object-fit: cover;    /* ถ้าอยากให้เห็นโลโก้ครบทั้งรูป ให้เปลี่ยนเป็น contain */
+  object-fit: cover; /* ถ้าอยากให้เห็นโลโก้ครบทั้งรูป ให้เปลี่ยนเป็น contain */
   display: block;
 }
 
@@ -243,7 +256,6 @@ p {
 
 /* show password */
 
-
 .directory {
   order: 2;
 }
@@ -294,7 +306,7 @@ p {
 }
 
 .shop-card.selected {
-  border-color: #ef9ca7;
+  border-color: var(--brand);
   background: #fff8f9;
   box-shadow: 0 0 0 1px #ef9ca725;
 }
@@ -429,7 +441,7 @@ p {
   font-size: 12px;
   cursor: pointer;
 }
-.category-select:focus{
+.category-select:focus {
   border-color: var(--brand);
 }
 .category-select.has-selection {
@@ -451,7 +463,11 @@ p {
   font-size: 12px;
   font-weight: 700;
   cursor: pointer;
-  transition: background .16s ease, border-color .16s ease, color .16s ease, transform .16s ease;
+  transition:
+    background 0.16s ease,
+    border-color 0.16s ease,
+    color 0.16s ease,
+    transform 0.16s ease;
 }
 
 .origin-button {
@@ -499,7 +515,6 @@ p {
   outline-offset: 2px;
 }
 
-
 .reset-filter {
   background-color: #fff;
   border: 1px solid var(--border);
@@ -533,8 +548,6 @@ p {
   border-color: var(--brand);
   color: white;
 }
-
-
 
 /* ========================================
    MAP
@@ -601,13 +614,14 @@ p {
   border: 3px solid #f3c3cc;
   border-top-color: var(--brand);
   border-radius: 50%;
-  animation: map-loading-spin .75s linear infinite;
+  animation: map-loading-spin 0.75s linear infinite;
 }
 
 @keyframes map-loading-spin {
-  to { transform: rotate(360deg); }
+  to {
+    transform: rotate(360deg);
+  }
 }
-
 
 .floor-svg {
   display: block;
@@ -763,8 +777,6 @@ p {
   color: var(--text);
 }
 
-
-
 .map-viewport.dragging {
   cursor: grabbing;
 }
@@ -804,7 +816,7 @@ p {
 .booth.selected ellipse,
 .booth.selected polygon {
   fill: var(--brand);
-  stroke: #741417;
+  stroke: var(--border-select);
   stroke-width: 2;
 }
 .booth.selected {
@@ -856,7 +868,6 @@ p {
   stroke-width: 3;
 }
 
-
 .control-button {
   width: 44px;
   height: 44px;
@@ -886,7 +897,10 @@ p {
   font-size: 12px;
   line-height: 1.6;
   min-height: 46px;
-  transition: background 0.3s ease, border-color 0.3s ease, color 0.3s ease;
+  transition:
+    background 0.3s ease,
+    border-color 0.3s ease,
+    color 0.3s ease;
 }
 
 .route-notice.is-visible {
@@ -931,8 +945,6 @@ p {
   font-size: 22px;
   letter-spacing: -0.6px;
 }
-
-
 
 .detail-gallery {
   margin: 16px 0 0;
@@ -986,8 +998,12 @@ p {
   background: rgb(0 0 0 / 65%);
 }
 
-.gallery-nav.prev { left: 10px; }
-.gallery-nav.next { right: 10px; }
+.gallery-nav.prev {
+  left: 10px;
+}
+.gallery-nav.next {
+  right: 10px;
+}
 
 .gallery-nav svg {
   width: 18px;
@@ -1058,14 +1074,15 @@ p {
   border: 0;
   border-radius: 50%;
   background: #d5d9e2;
-  transition: background 0.15s, transform 0.15s;
+  transition:
+    background 0.15s,
+    transform 0.15s;
 }
 
 .gallery-dot.active {
   background: var(--brand);
   transform: scale(1.25);
 }
-
 
 .detail-gallery-main > img {
   cursor: zoom-in;
@@ -1099,8 +1116,12 @@ dialog.lightbox::backdrop {
 }
 
 @keyframes lightbox-in {
-  from { opacity: 0; }
-  to { opacity: 1; }
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }
 
 .lightbox-img {
@@ -1142,8 +1163,12 @@ dialog.lightbox::backdrop {
   transform: translateY(-50%);
 }
 
-.lightbox-nav.prev { left: 14px; }
-.lightbox-nav.next { right: 14px; }
+.lightbox-nav.prev {
+  left: 14px;
+}
+.lightbox-nav.next {
+  right: 14px;
+}
 
 .lightbox-close svg,
 .lightbox-nav svg {
@@ -1178,12 +1203,18 @@ dialog.lightbox.single .lightbox-counter {
 .icon.fb-logo {
   fill: none;
   stroke: none;
-  margin-right:2px;
+  margin-right: 2px;
 }
-.icon.fb-logo rect { fill: #1877F2; }
-.icon.fb-logo path { fill: #fff; }
+.icon.fb-logo rect {
+  fill: #1877f2;
+}
+.icon.fb-logo path {
+  fill: #fff;
+}
 
-body.picking-origin .booth { cursor: crosshair; }
+body.picking-origin .booth {
+  cursor: crosshair;
+}
 body.picking-origin #map-section {
   outline: 3px solid #1a73e8;
   outline-offset: -3px;
@@ -1231,8 +1262,6 @@ body.picking-origin #map-section {
   font-size: 11px;
   color: var(--muted);
 }
-
-
 
 .detail-section {
   margin-top: 18px;
@@ -1305,7 +1334,6 @@ body.picking-origin #map-section {
   background: var(--brand-hover);
 }
 
-
 .close-button {
   width: 44px;
   height: 44px;
@@ -1370,9 +1398,7 @@ footer {
   display: block;
 }
 
-
 @media (prefers-reduced-motion: reduce) {
-
   *,
   *::before,
   *::after {
@@ -1429,9 +1455,8 @@ All Booths page
   order: 2;
 }
 
-
 @media (max-width: 639px) {
-      .route-marker {
+  .route-marker {
     width: 11px;
     height: 16px;
   }
@@ -1464,7 +1489,6 @@ All Booths page
     padding: 0 10px;
   }
 
-
   .origin-clear-button {
     width: 40px;
     justify-content: center;
@@ -1477,7 +1501,6 @@ All Booths page
 }
 /* Mobile bottom navigation */
 @media (max-width: 639px) {
-
   /* เว้นพื้นที่ไม่ให้ navigation บังเนื้อหาท้ายหน้า */
   body {
     padding-bottom: calc(88px + env(safe-area-inset-bottom, 0px));
@@ -1565,7 +1588,6 @@ All Booths page
 
   .map-bottom-left {
     gap: 6px;
-
   }
 
   .route-legend {
@@ -1573,7 +1595,6 @@ All Booths page
     font-size: 10px;
     flex-direction: column;
   }
-
 
   .origin-button,
   .origin-clear-button {
@@ -1600,7 +1621,6 @@ All Booths page
     gap: 5px;
   }
 
-
   .control-button {
     width: 34px;
     height: 34px;
@@ -1617,20 +1637,17 @@ All Booths page
     min-width: 40px;
     font-size: 10px;
   }
-    .lightbox-nav {
+  .lightbox-nav {
     width: 38px;
     height: 38px;
   }
 }
-
-
 
 @media (min-width: 1400px) {
   .layout {
     grid-template-columns: 260px minmax(0, 1fr) 270px;
   }
 }
-
 
 @media (min-width: 1100px) {
   .layout {
@@ -1720,7 +1737,7 @@ All Booths page
   .navigation {
     gap: 24px;
   }
-   .map-bottom {
+  .map-bottom {
     min-height: 62px;
   }
 
@@ -1732,8 +1749,6 @@ All Booths page
     width: 40px;
     height: 40px;
   }
-  
-
 
   .booths-page .layout {
     grid-template-columns: minmax(0, 1fr) 340px;
@@ -1781,7 +1796,7 @@ All Booths page
   /* ========================================
    Mobile Booth Detail - Bottom Sheet
 ======================================== */
- #detail-dialog {
+  #detail-dialog {
     position: fixed !important;
 
     inset: auto 0 0 0 !important;
@@ -1871,22 +1886,22 @@ All Booths page
     user-select: none;
     cursor: grab;
 
-     position: relative;
+    position: relative;
 
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
 
-  width: 100%;
+    width: 100%;
 
-  padding: 6px 15px 10px;
+    padding: 6px 15px 10px;
 
-  background: white;
+    background: white;
 
-  border-bottom: 1px solid var(--border);
+    border-bottom: 1px solid var(--border);
 
-  font-size: 12px;
-  font-weight: 700;
+    font-size: 12px;
+    font-weight: 700;
   }
 
   #detail-dialog .dialog-heading:active {
@@ -1927,8 +1942,7 @@ All Booths page
   #detail-dialog::backdrop {
     background: rgb(23 32 52 / 0%);
 
-    transition:
-      background 0.35s ease;
+    transition: background 0.35s ease;
   }
 
   #detail-dialog[open]::backdrop {
@@ -1939,7 +1953,6 @@ All Booths page
     background: rgb(23 32 52 / 0%);
   }
 }
-
 
 .booth-logo {
   pointer-events: none;
