@@ -15,7 +15,7 @@ import {
   updateBoothByIdMap,
 } from "../shared/state.js";
 import { t } from "./i18n.js";
-import { getMapLayout } from "../shared/map-layout.js";
+import { getMapLayout, getIconImages } from "../shared/map-layout.js";
 
 function mapSize() {
   const layout = getMapLayout();
@@ -44,6 +44,7 @@ export function addBooth(
   textColor = "#425066",
   boothId = "",
   mapLabel = "",
+  rotation = 0,
 ) {
   const id = String(boothId || zone + String(number).padStart(2, "0")).trim();
   const shop = featuredShops[id] || {};
@@ -74,6 +75,7 @@ export function addBooth(
     color,
     fontSize,
     textColor,
+    rotation,
     description: shop?.description || t("defaultDesc"),
     hours: shop?.hours || t("defaultHours"),
     facebook: String(shop?.facebook ?? "").trim(),
@@ -84,8 +86,9 @@ export function addBooth(
 export function buildMapData(populateCategoryDropdownCb) {
   booths.length = 0;
 
-  getMapLayout()
-    .elements.filter((element) => element.type === "booth")
+  const layout = getMapLayout();
+  layout.elements
+    .filter((element) => element.type === "booth")
     .forEach((booth) => {
       const id = booth.boothId || booth.id;
       const zone = booth.zone;
@@ -106,10 +109,87 @@ export function buildMapData(populateCategoryDropdownCb) {
           booth.label_en ||
           booth.label_lo ||
           id,
+        booth.rotation,
       );
     });
 
   updateBoothByIdMap();
+
+  layout.elements
+    .filter((element) => element.type === "stage" || element.type === "other")
+    .forEach((item) => {
+      const id = item.id;
+      const rawShop =
+        featuredShops[id] ||
+        (item.boothId ? featuredShops[item.boothId] : null) ||
+        {};
+      const defaultLabel =
+        (state.lang === "lo" ? item.label_lo : item.label_en) ||
+        item.label_en ||
+        item.label_lo ||
+        (item.type === "stage"
+          ? state.lang === "lo"
+            ? "ເວທີຫຼັກ"
+            : "Main Stage"
+          : state.lang === "lo"
+            ? "ຈຸດສຳຄັນ"
+            : "Point of Interest");
+      const name = rawShop.name || defaultLabel;
+      const category =
+        rawShop.category ||
+        (item.type === "stage"
+          ? state.lang === "lo"
+            ? "ເວທີ"
+            : "Stage"
+          : state.lang === "lo"
+            ? "ຈຸດບໍລິການ"
+            : "Facility");
+      const description =
+        rawShop.description ||
+        (item.type === "stage"
+          ? state.lang === "lo"
+            ? "ເວທີຫຼັກສຳລັບການສະແດງ ແລະ ກິດຈະກຳຕ່າງໆພາຍໃນງານ"
+            : "Main stage for performances, presentations and event activities."
+          : state.lang === "lo"
+            ? "ຈຸດບໍລິການ ແລະ ສິ່ງອຳນວຍຄວາມສະດວກພາຍໃນງານ"
+            : "Facility and point of interest inside the event.");
+      const hours =
+        rawShop.hours ||
+        (state.lang === "lo" ? "ເປີດຕາມເວລາງານ" : "Open during event hours");
+
+      const poiItem = {
+        id,
+        type: item.type,
+        mapLabel: defaultLabel,
+        zone: item.zone || "",
+        x: item.x,
+        y: item.y,
+        width: item.width,
+        height: item.height,
+        shape: item.shape || "rectangle",
+        name,
+        category,
+        logo: rawShop.logo || "",
+        customLogo: rawShop.logo || "",
+        images: Array.isArray(rawShop.images) ? rawShop.images : [],
+        color: item.color || "#dbeafe",
+        fontSize: item.fontSize || 12,
+        textColor: item.textColor || "#334155",
+        rotation: item.rotation || 0,
+        description,
+        hours,
+        facebook: String(rawShop.facebook ?? "").trim(),
+        featured: Boolean(rawShop && rawShop.name),
+      };
+
+      boothById.set(id, poiItem);
+      boothById.set(id.toUpperCase(), poiItem);
+      if (item.boothId) {
+        boothById.set(item.boothId, poiItem);
+        boothById.set(item.boothId.toUpperCase(), poiItem);
+      }
+    });
+
   if (populateCategoryDropdownCb) populateCategoryDropdownCb();
 }
 
@@ -175,12 +255,25 @@ function mapPathData(points) {
     const previous = points[index - 1];
     const current = points[index];
     const next = points[index + 1];
-    const beforeLength = Math.hypot(current.x - previous.x, current.y - previous.y);
+    const beforeLength = Math.hypot(
+      current.x - previous.x,
+      current.y - previous.y,
+    );
     const afterLength = Math.hypot(next.x - current.x, next.y - current.y);
     const before = Math.min(radius, beforeLength / 2);
     const after = Math.min(radius, afterLength / 2);
-    const start = { x: current.x + ((previous.x - current.x) / Math.max(1, beforeLength)) * before, y: current.y + ((previous.y - current.y) / Math.max(1, beforeLength)) * before };
-    const end = { x: current.x + ((next.x - current.x) / Math.max(1, afterLength)) * after, y: current.y + ((next.y - current.y) / Math.max(1, afterLength)) * after };
+    const start = {
+      x:
+        current.x +
+        ((previous.x - current.x) / Math.max(1, beforeLength)) * before,
+      y:
+        current.y +
+        ((previous.y - current.y) / Math.max(1, beforeLength)) * before,
+    };
+    const end = {
+      x: current.x + ((next.x - current.x) / Math.max(1, afterLength)) * after,
+      y: current.y + ((next.y - current.y) / Math.max(1, afterLength)) * after,
+    };
     d += ` L ${start.x} ${start.y} Q ${current.x} ${current.y} ${end.x} ${end.y}`;
   }
   const last = points.at(-1);
@@ -281,6 +374,21 @@ function appendTree(group, item) {
     y + height * 0.63,
     Math.min(width, height) * 0.06,
   );
+}
+function appendIcon(group, item) {
+  const src = getIconImages()[item.iconId];
+  if (!src) return; // ยังไม่ได้อัปโหลด: ไม่แสดงอะไรให้ผู้เข้าชมเห็น
+  const image = svgElement("image", {
+    href: src,
+    x: item.x,
+    y: item.y,
+    width: item.width,
+    height: item.height,
+    preserveAspectRatio: "xMidYMid meet",
+    "pointer-events": "none",
+  });
+  image.addEventListener("error", () => image.remove());
+  group.append(image);
 }
 
 export function addZoneLabel(zone, x, y) {
@@ -469,7 +577,36 @@ export function renderMap(applyFiltersCb) {
   getMapLayout()
     .elements.filter((item) => item.type !== "booth")
     .forEach((item) => {
-      const group = svgElement("g", { class: `map-element map-${item.type}` });
+      const isInteractive = item.type === "stage" || item.type === "other";
+      const itemId = item.id;
+      const centerX = item.x + item.width / 2;
+      const centerY = item.y + item.height / 2;
+      const rotation = Number(item.rotation) || 0;
+      const ownLabel =
+        (state.lang === "lo" ? item.label_lo : item.label_en) ||
+        item.label_en ||
+        item.label_lo;
+      const label =
+        item.type === "tree"
+          ? ""
+          : item.type === "icon"
+            ? ownLabel || ""
+            : ownLabel || item.type;
+      const group = svgElement("g", {
+        class: `map-element map-${item.type}${isInteractive ? " booth interactive-poi" : ""}`,
+        ...(isInteractive
+          ? {
+              role: "button",
+              tabindex: "0",
+              "aria-label": label,
+              "aria-pressed": "false",
+              "data-id": itemId,
+            }
+          : {}),
+        ...(rotation
+          ? { transform: `rotate(${rotation} ${centerX} ${centerY})` }
+          : {}),
+      });
       if (item.type === "tree") {
         appendTree(group, item);
       } else if (item.type === "path") {
@@ -484,35 +621,50 @@ export function renderMap(applyFiltersCb) {
             "pointer-events": "none",
           }),
         );
+      } else if (item.type === "icon") {
+        appendIcon(group, item);
+      } else if (item.type === "label") {
       } else {
         group.append(mapShape(item, { fill: item.color, stroke: "#94a3b8" }));
       }
-      const label =
-        item.type === "tree"
-          ? ""
-          : (state.lang === "lo" ? item.label_lo : item.label_en) ||
-            item.label_en ||
-            item.label_lo ||
-            item.type;
       const verticalWalkway =
         item.type === "walkway" && item.height > item.width;
-      const lines = item.type === "path" ? [] : wrapItemLabel(
-        label,
-        item.width,
-        item.height,
-        item.fontSize,
-        verticalWalkway,
-      );
+      const lines =
+        item.type === "path"
+          ? []
+          : wrapItemLabel(
+              label,
+              item.width,
+              item.height,
+              item.fontSize,
+              verticalWalkway,
+            );
       const textElement = createItemTextElement({
         lines,
         fontSize: item.fontSize,
         textColor: item.textColor || "#334155",
         centerX: item.x + item.width / 2,
-        centerY: item.y + item.height / 2,
+        centerY:
+          item.type === "icon"
+            ? item.y + item.height + (Number(item.fontSize) || 12) + 2
+            : item.y + item.height / 2,
         verticalWalkway,
+        className: isInteractive ? "booth-label" : "",
       });
       if (textElement) {
         group.append(textElement);
+      }
+      if (isInteractive) {
+        group.addEventListener("keydown", (event) => {
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            event.stopPropagation();
+            if (selectBoothRef) {
+              selectBoothRef(itemId, true, true);
+            }
+          }
+        });
+        boothElements.set(itemId, group);
       }
       $("#map-elements").append(group);
     });
@@ -528,6 +680,11 @@ export function renderMap(applyFiltersCb) {
       "aria-label": `${booth.id}, ${booth.name}, ${zoneTextStr} ${booth.zone}`,
       "aria-pressed": "false",
       "data-id": booth.id,
+      ...(booth.rotation
+        ? {
+            transform: `rotate(${booth.rotation} ${booth.x + booth.width / 2} ${booth.y + booth.height / 2})`,
+          }
+        : {}),
     });
 
     const lines = wrapItemLabel(

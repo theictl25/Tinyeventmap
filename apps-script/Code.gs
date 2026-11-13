@@ -1,7 +1,7 @@
 const WRITE_TOKEN = PropertiesService.getScriptProperties().getProperty(
   "EVENTMAP_WRITE_TOKEN",
 );
-const ROOT_FOLDER_ID = "1Sw4ZGOEq8aA1uCVzw0-kMED0GqGY4bLG";
+const ROOT_FOLDER_ID = "18Kuw8Pydm7MUD1GuIlmq0zHjKrGPf516";
 const IMAGE_CACHE_KEY = "BOOTH_IMAGES_V1";
 
 function doGet(e) {
@@ -109,15 +109,11 @@ function readBooths(sheet) {
   const result = {};
 
   data.slice(1).forEach((row) => {
-    const id = String(row[boothIdColumn] || "")
-      .trim()
-      .toUpperCase();
+    const id = String(row[boothIdColumn] || "").trim().toUpperCase();
     if (!id) return;
 
     const get = (field) =>
-      columns[field] === undefined
-        ? ""
-        : String(row[columns[field]] || "").trim();
+      columns[field] === undefined ? "" : String(row[columns[field]] || "").trim();
 
     result[id] = {
       name: get("name"),
@@ -278,11 +274,7 @@ function handleVisitorPing(params) {
     // Throttled sync to Google Sheet
     const lastSync = Number(props.getProperty("LAST_SHEET_SYNC") || 0);
     if (now - lastSync > 60000 || currentOnline >= peakCount) {
-      syncStatsToSheet(
-        currentOnline,
-        peakCount,
-        Number(props.getProperty("TOTAL_VIEWS") || 0),
-      );
+      syncStatsToSheet(currentOnline, peakCount, Number(props.getProperty("TOTAL_VIEWS") || 0));
       props.setProperty("LAST_SHEET_SYNC", String(now));
     }
 
@@ -293,9 +285,7 @@ function handleVisitorPing(params) {
     });
   } finally {
     if (hasLock) {
-      try {
-        lock.releaseLock();
-      } catch (_) {}
+      try { lock.releaseLock(); } catch (_) {}
     }
   }
 }
@@ -348,16 +338,14 @@ function syncStatsToSheet(online, peak, totalViews) {
     let statsSheet = spreadsheet.getSheetByName("Stats");
     if (!statsSheet) {
       statsSheet = spreadsheet.insertSheet("Stats");
-      statsSheet
-        .getRange(1, 1, 1, 3)
-        .setValues([["Metric", "Value", "Last Updated"]]);
+      statsSheet.getRange(1, 1, 1, 3).setValues([["Metric", "Value", "Last Updated"]]);
       statsSheet.getRange(1, 1, 1, 3).setFontWeight("bold");
     }
 
     const nowStr = Utilities.formatDate(
       new Date(),
       Session.getScriptTimeZone() || "GMT+7",
-      "yyyy-MM-dd HH:mm:ss",
+      "yyyy-MM-dd HH:mm:ss"
     );
 
     statsSheet.getRange(2, 1, 3, 3).setValues([
@@ -370,8 +358,14 @@ function syncStatsToSheet(online, peak, totalViews) {
   }
 }
 
+
 function thumb_(id, size) {
   return `https://drive.google.com/thumbnail?id=${id}&sz=w${size}`;
+}
+
+// สำหรับโลโก้: คงความโปร่งใสของ PNG
+function logoUrl_(id) {
+  return `https://lh3.googleusercontent.com/d/${id}`;
 }
 
 // อ่านรูปทั้งหมดจาก Drive -> { C1: [{id,name,type}, ...], ... }
@@ -388,11 +382,7 @@ function scanDriveImages_() {
     while (files.hasNext()) {
       const f = files.next();
       if (!f.getMimeType().startsWith("image/")) continue;
-      list.push({
-        id: f.getId(),
-        name: f.getName(),
-        type: getImageType(f.getName()),
-      });
+      list.push({ id: f.getId(), name: f.getName(), type: getImageType(f.getName()) });
     }
 
     list.sort((a, b) => a.name.localeCompare(b.name));
@@ -407,15 +397,11 @@ function getDriveImages_(force) {
   if (!force) {
     const hit = cache.get(IMAGE_CACHE_KEY);
     if (hit) {
-      try {
-        return JSON.parse(hit);
-      } catch (_) {}
+      try { return JSON.parse(hit); } catch (_) {}
     }
   }
   const data = scanDriveImages_();
-  try {
-    cache.put(IMAGE_CACHE_KEY, JSON.stringify(data), 60);
-  } catch (_) {}
+  try { cache.put(IMAGE_CACHE_KEY, JSON.stringify(data), 60); } catch (_) {}
   return data;
 }
 
@@ -432,7 +418,7 @@ function mergeDriveImages_(booths) {
       .map((f) => thumb_(f.id, 1200));
 
     // Drive ชนะ ถ้าไม่มีรูปใน Drive ค่อยใช้ค่าจากคอลัมน์ในชีตเป็น fallback
-    if (logo) booth.logo = thumb_(logo.id, 400);
+    if (logo) booth.logo = logoUrl_(logo.id);
     if (photos.length) booth.images = photos;
   });
 
@@ -447,9 +433,7 @@ function refreshImages() {
 // รันครั้งเดียวจากหน้า Apps Script
 function setupImageAutoRefresh() {
   ScriptApp.getProjectTriggers()
-    .filter((t) =>
-      ["refreshImages", "syncBoothImages"].includes(t.getHandlerFunction()),
-    )
+    .filter((t) => ["refreshImages", "syncBoothImages"].includes(t.getHandlerFunction()))
     .forEach((t) => ScriptApp.deleteTrigger(t));
 
   ScriptApp.newTrigger("refreshImages").timeBased().everyMinutes(5).create();
@@ -476,12 +460,18 @@ function checkImageFolders() {
   });
 }
 
+
+
 function getImageType(fileName) {
   const name = fileName.toLowerCase();
 
-  if (name.includes("logo") || name.includes("profile")) {
+  if (
+    name.includes("logo") ||
+    name.includes("profile")
+  ) {
     return "logo";
   }
 
   return "image";
 }
+

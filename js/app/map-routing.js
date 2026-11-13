@@ -31,24 +31,18 @@ function elementCenter(element) {
 }
 
 function walkwaySegment(walkway, index) {
-  const horizontal = walkway.width >= walkway.height;
   const middle = elementCenter(walkway);
-
-  return horizontal
-    ? {
-        id: "walkway-" + index,
-        horizontal: true,
-        start: point(walkway.x, middle.y),
-        end: point(walkway.x + walkway.width, middle.y),
-        nodes: [],
-      }
-    : {
-        id: "walkway-" + index,
-        horizontal: false,
-        start: point(middle.x, walkway.y),
-        end: point(middle.x, walkway.y + walkway.height),
-        nodes: [],
-      };
+  const horizontal = walkway.width >= walkway.height;
+  const halfLength = (horizontal ? walkway.width : walkway.height) / 2;
+  const angle = ((Number(walkway.rotation) || 0) * Math.PI) / 180 +
+    (horizontal ? 0 : Math.PI / 2);
+  const delta = point(Math.cos(angle) * halfLength, Math.sin(angle) * halfLength);
+  return {
+    id: "walkway-" + index,
+    start: point(middle.x - delta.x, middle.y - delta.y),
+    end: point(middle.x + delta.x, middle.y + delta.y),
+    nodes: [],
+  };
 }
 
 function pathSegments(path, index) {

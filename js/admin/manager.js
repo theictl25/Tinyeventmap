@@ -8,8 +8,13 @@ import {
   getMapLayout,
   normalizeMapLayout,
   saveMapLayout,
+  cleanIconId,
+  getIconImages,
 } from "../shared/map-layout.js";
-import { loadMapLayoutFromGoogleSheet } from "../shared/api.js";
+import {
+  loadMapLayoutFromGoogleSheet,
+  loadIconImagesFromGoogleSheet,
+} from "../shared/api.js";
 import {
   initialiseManagerLanguage,
   managerLanguage,
@@ -27,7 +32,9 @@ const gridInput = document.querySelector("#grid-size");
 const backgroundImageInput = document.querySelector("#background-image-url");
 const backgroundFileInput = document.querySelector("#background-image-file");
 const backgroundOpacityInput = document.querySelector("#background-opacity");
-const backgroundOpacityValue = document.querySelector("#background-opacity-value");
+const backgroundOpacityValue = document.querySelector(
+  "#background-opacity-value",
+);
 const backgroundLockedInput = document.querySelector("#background-locked");
 const backgroundHelp = document.querySelector("#background-help");
 const zoomLabel = document.querySelector("#manager-zoom-label");
@@ -211,7 +218,10 @@ function nextElementId(type) {
   return `${type}-${count}`;
 }
 function nextBoothId(zone) {
-  const normalizedZone = String(zone || "A").trim().toUpperCase() || "A";
+  const normalizedZone =
+    String(zone || "A")
+      .trim()
+      .toUpperCase() || "A";
   const highestNumber = layout.elements
     .filter((item) => item.type === "booth" && item.zone === normalizedZone)
     .reduce((highest, item) => {
@@ -234,7 +244,9 @@ function pasteCopiedElements() {
   const left = Math.min(...copiedElements.map((item) => item.x));
   const top = Math.min(...copiedElements.map((item) => item.y));
   const right = Math.max(...copiedElements.map((item) => item.x + item.width));
-  const bottom = Math.max(...copiedElements.map((item) => item.y + item.height));
+  const bottom = Math.max(
+    ...copiedElements.map((item) => item.y + item.height),
+  );
   const requestedOffset = grid * 4;
   const offsetX =
     right + requestedOffset <= layout.width
@@ -248,7 +260,10 @@ function pasteCopiedElements() {
     const copy = structuredClone(source);
     copy.id = nextElementId(copy.type);
     copy.x = Math.max(0, Math.min(layout.width - copy.width, copy.x + offsetX));
-    copy.y = Math.max(0, Math.min(layout.height - copy.height, copy.y + offsetY));
+    copy.y = Math.max(
+      0,
+      Math.min(layout.height - copy.height, copy.y + offsetY),
+    );
     if (copy.type === "path") {
       copy.points = copy.points.map((point) => ({
         x: point.x + offsetX,
@@ -319,7 +334,9 @@ function itemLabel(item) {
 
 function splitGraphemes(text) {
   if (typeof Intl !== "undefined" && Intl.Segmenter) {
-    const segmenter = new Intl.Segmenter(undefined, { granularity: "grapheme" });
+    const segmenter = new Intl.Segmenter(undefined, {
+      granularity: "grapheme",
+    });
     return Array.from(segmenter.segment(text), (s) => s.segment);
   }
   return Array.from(text);
@@ -330,7 +347,16 @@ function graphemeLength(text) {
 }
 
 function wrapItemLabel(item, verticalWalkway) {
-  const rawLabel = item.type === "tree" ? "" : String(itemLabel(item) || "");
+  const ownLabel = () =>
+    (managerLanguage() === "lo"
+      ? item.label_lo || item.label_en
+      : item.label_en || item.label_lo) || "";
+  const rawLabel =
+    item.type === "tree"
+      ? ""
+      : item.type === "icon"
+        ? ownLabel() // ไม่ถอยไปใช้ id เหมือนองค์ประกอบอื่น
+        : String(itemLabel(item) || "");
   const label = rawLabel
     .replace(/\\r\\n/g, "\n")
     .replace(/\\n/g, "\n")
@@ -438,6 +464,8 @@ function updateViewBox() {
   );
   zoomLabel.textContent = Math.round(camera.scale * 100) + "%";
   document.querySelector("#manager-zoom-out").disabled = camera.scale <= 1;
+  const zoomInBtn = document.querySelector("#manager-zoom-in");
+  if (zoomInBtn) zoomInBtn.disabled = camera.scale >= 20;
 }
 function scheduleCameraPaint() {
   if (cameraPaintFrame !== null) return;
@@ -486,6 +514,23 @@ function panToPointer(event, start) {
 function itemFill(item) {
   return item.color;
 }
+function normalizeRotation(value) {
+  const rotation = Number(value);
+  return Number.isFinite(rotation) ? ((rotation % 360) + 360) % 360 : 0;
+}
+function angleFromCenter(point, center) {
+  return Math.atan2(point.y - center.y, point.x - center.x);
+}
+function rotatePoint(point, center, angle) {
+  const cos = Math.cos(angle);
+  const sin = Math.sin(angle);
+  const x = point.x - center.x;
+  const y = point.y - center.y;
+  return {
+    x: center.x + x * cos - y * sin,
+    y: center.y + x * sin + y * cos,
+  };
+}
 function pathMarkup(points) {
   if (!Array.isArray(points) || points.length < 2) return "";
   const radius = 18;
@@ -494,15 +539,43 @@ function pathMarkup(points) {
     const previous = points[index - 1];
     const current = points[index];
     const next = points[index + 1];
-    const before = Math.min(radius, Math.hypot(current.x - previous.x, current.y - previous.y) / 2);
-    const after = Math.min(radius, Math.hypot(next.x - current.x, next.y - current.y) / 2);
+    const before = Math.min(
+      radius,
+      Math.hypot(current.x - previous.x, current.y - previous.y) / 2,
+    );
+    const after = Math.min(
+      radius,
+      Math.hypot(next.x - current.x, next.y - current.y) / 2,
+    );
     const start = {
-      x: current.x + ((previous.x - current.x) / Math.max(1, Math.hypot(previous.x - current.x, previous.y - current.y))) * before,
-      y: current.y + ((previous.y - current.y) / Math.max(1, Math.hypot(previous.x - current.x, previous.y - current.y))) * before,
+      x:
+        current.x +
+        ((previous.x - current.x) /
+          Math.max(
+            1,
+            Math.hypot(previous.x - current.x, previous.y - current.y),
+          )) *
+          before,
+      y:
+        current.y +
+        ((previous.y - current.y) /
+          Math.max(
+            1,
+            Math.hypot(previous.x - current.x, previous.y - current.y),
+          )) *
+          before,
     };
     const end = {
-      x: current.x + ((next.x - current.x) / Math.max(1, Math.hypot(next.x - current.x, next.y - current.y))) * after,
-      y: current.y + ((next.y - current.y) / Math.max(1, Math.hypot(next.x - current.x, next.y - current.y))) * after,
+      x:
+        current.x +
+        ((next.x - current.x) /
+          Math.max(1, Math.hypot(next.x - current.x, next.y - current.y))) *
+          after,
+      y:
+        current.y +
+        ((next.y - current.y) /
+          Math.max(1, Math.hypot(next.x - current.x, next.y - current.y))) *
+          after,
     };
     d += ` L ${start.x} ${start.y} Q ${current.x} ${current.y} ${end.x} ${end.y}`;
   }
@@ -567,7 +640,15 @@ function shapeMarkup(item, fill) {
     centerY = y + height / 2;
 
   if (item.type === "path") {
-    return '<path d="' + pathMarkup(item.points) + '" fill="none" stroke="' + fill + '" stroke-width="' + item.pathWidth + '" stroke-linecap="round" stroke-linejoin="round"/>';
+    return (
+      '<path d="' +
+      pathMarkup(item.points) +
+      '" fill="none" stroke="' +
+      fill +
+      '" stroke-width="' +
+      item.pathWidth +
+      '" stroke-linecap="round" stroke-linejoin="round"/>'
+    );
   }
 
   if (item.type === "tree") {
@@ -642,6 +723,69 @@ function shapeMarkup(item, fill) {
       '" fill="' +
       fill +
       '"/>'
+    );
+  }
+  if (item.type === "label") {
+    // พื้นที่โปร่งใสไว้ให้คลิก/ลากได้ ไม่วาดกล่องสี
+    return (
+      '<rect x="' +
+      x +
+      '" y="' +
+      y +
+      '" width="' +
+      width +
+      '" height="' +
+      height +
+      '" fill="transparent"/>'
+    );
+  }
+  if (item.type === "icon") {
+    const src = getIconImages()[item.iconId];
+    const hit =
+      '<rect x="' +
+      x +
+      '" y="' +
+      y +
+      '" width="' +
+      width +
+      '" height="' +
+      height +
+      '" fill="transparent"/>';
+    if (src) {
+      return (
+        hit +
+        '<image href="' +
+        escapeHTML(src) +
+        '" x="' +
+        x +
+        '" y="' +
+        y +
+        '" width="' +
+        width +
+        '" height="' +
+        height +
+        '" preserveAspectRatio="xMidYMid meet" pointer-events="none"/>'
+      );
+    }
+    // ยังไม่มีรูป: กรอบเส้นประ + แสดงรหัสที่รออยู่
+    return (
+      hit +
+      '<rect x="' +
+      (x + 2) +
+      '" y="' +
+      (y + 2) +
+      '" width="' +
+      (width - 4) +
+      '" height="' +
+      (height - 4) +
+      '" rx="8" fill="#fff" fill-opacity="0.6" stroke="#94a3b8" stroke-width="2" stroke-dasharray="6 4"/>' +
+      '<text x="' +
+      centerX +
+      '" y="' +
+      (centerY + 4) +
+      '" text-anchor="middle" font-size="11" fill="#64748b">' +
+      escapeHTML(item.iconId || "?") +
+      "</text>"
     );
   }
   if (item.shape === "circle")
@@ -758,48 +902,110 @@ function renderCanvas() {
     const active = selectedIds.has(item.id);
     const labelCenterX = item.x + item.width / 2;
     const labelCenterY = item.y + item.height / 2;
+    const labelTextY =
+      item.type === "landmark"
+        ? item.y + item.height * 0.88
+        : item.type === "icon"
+          ? item.y + item.height + (Number(item.fontSize) || 12) + 2
+          : labelCenterY;
     const verticalWalkway = item.type === "walkway" && item.height > item.width;
-    const handle = !active || selectedIds.size !== 1 || item.type === "path"
-      ? ""
-      : ["nw", "ne", "sw", "se"]
-          .map((corner) => {
-            const right = corner.includes("e");
-            const bottom = corner.includes("s");
-            const handleX = item.x + (right ? item.width : 0);
-            const handleY = item.y + (bottom ? item.height : 0);
-            const attributes =
-              ' class="resize-handle" data-resize-id="' +
-              escapeHTML(item.id) +
-              '" data-resize-corner="' +
-              corner +
-              '"';
-            return (
-              "<rect" +
-              attributes +
-              ' x="' +
-              (handleX - 5) +
-              '" y="' +
-              (handleY - 5) +
-              '" width="10" height="10" rx="2"/>'
-            );
-          })
-          .join("");
-    const pathPoints = active && selectedIds.size === 1 && item.type === "path"
-      ? item.points
-          .map((point, index) => '<circle class="path-point-handle" data-path-point-id="' + escapeHTML(item.id) + '" data-path-point-index="' + index + '" cx="' + point.x + '" cy="' + point.y + '" r="7"/>')
-          .join("")
-      : "";
+    const handle =
+      !active || selectedIds.size !== 1 || item.type === "path"
+        ? ""
+        : ["nw", "ne", "sw", "se"]
+            .map((corner) => {
+              const right = corner.includes("e");
+              const bottom = corner.includes("s");
+              const handleX = item.x + (right ? item.width : 0);
+              const handleY = item.y + (bottom ? item.height : 0);
+              const attributes =
+                ' class="resize-handle" data-resize-id="' +
+                escapeHTML(item.id) +
+                '" data-resize-corner="' +
+                corner +
+                '"';
+              return (
+                "<rect" +
+                attributes +
+                ' x="' +
+                (handleX - 5) +
+                '" y="' +
+                (handleY - 5) +
+                '" width="10" height="10" rx="2"/>'
+              );
+            })
+            .join("");
+    const pathPoints =
+      active && selectedIds.size === 1 && item.type === "path"
+        ? item.points
+            .map(
+              (point, index) =>
+                '<circle class="path-point-handle" data-path-point-id="' +
+                escapeHTML(item.id) +
+                '" data-path-point-index="' +
+                index +
+                '" cx="' +
+                point.x +
+                '" cy="' +
+                point.y +
+                '" r="7"/>',
+            )
+            .join("")
+        : "";
+    const rotationHandle =
+      active && selectedIds.size === 1
+        ? '<line class="rotation-handle-line" x1="' +
+          labelCenterX +
+          '" y1="' +
+          (item.y - 5) +
+          '" x2="' +
+          labelCenterX +
+          '" y2="' +
+          (item.y - 24) +
+          '"/><circle class="rotation-handle" data-rotate-id="' +
+          escapeHTML(item.id) +
+          '" cx="' +
+          labelCenterX +
+          '" cy="' +
+          (item.y - 30) +
+          '" r="6"/>'
+        : "";
+    const rotation = Number(item.rotation) || 0;
     html +=
       '<g class="builder-item type-' +
       escapeHTML(item.type) +
       (active ? " selected" : "") +
       '" data-id="' +
       escapeHTML(item.id) +
+      '"' +
+      (rotation
+        ? ' transform="rotate(' +
+          rotation +
+          " " +
+          labelCenterX +
+          " " +
+          labelCenterY +
+          ')"'
+        : "") +
       '">' +
       shapeMarkup(item, escapeHTML(itemFill(item))) +
-      (item.type === "path" ? "" : itemLabelMarkup(item, labelCenterX, labelCenterY, verticalWalkway)) +
+      (item.type === "label" && active
+        ? '<rect x="' +
+          item.x +
+          '" y="' +
+          item.y +
+          '" width="' +
+          item.width +
+          '" height="' +
+          item.height +
+          '" fill="none" stroke="#f59e0b" stroke-width="1" stroke-dasharray="4 3" pointer-events="none"/>'
+        : "") +
+      (item.type === "path"
+        ? ""
+        : itemLabelMarkup(item, labelCenterX, labelCenterY, verticalWalkway)) +
       handle +
       pathPoints +
+      rotationHandle +
       "</g>";
   });
   canvas.innerHTML = html;
@@ -869,6 +1075,14 @@ function renderInspector() {
     "</div>" +
     multilineField(managerT("laoName"), "label_lo") +
     multilineField(managerT("englishName"), "label_en") +
+    (item.type === "icon"
+      ? field(managerT("iconId"), "iconId") +
+        '<p class="path-editor-help">' +
+        managerT("iconFolderHint") +
+        " ICON_" +
+        escapeHTML(item.iconId || "…") +
+        "</p>"
+      : "") +
     (item.type === "booth"
       ? field(managerT("boothId"), "boothId") + field(managerT("zone"), "zone")
       : "") +
@@ -877,15 +1091,28 @@ function renderInspector() {
         managerT("rotateWalkway") +
         "</button>"
       : "") +
-    (item.type !== "tree" && item.type !== "walkway" && item.type !== "path" ? shapeField : "") +
+    (item.type !== "tree" && item.type !== "walkway" && item.type !== "path"
+      ? shapeField
+      : "") +
     (item.type === "path"
-      ? field(managerT("pathWidth"), "pathWidth", "number", 'min="4" max="120"') +
-        '<div class="path-editor-actions"><button class="button" type="button" id="add-path-point">' + managerT("addPathPoint") + '</button><button class="button" type="button" id="remove-path-point">' + managerT("removePathPoint") + '</button></div><p class="path-editor-help">' + managerT("pathEditorHelp") + "</p>"
+      ? field(
+          managerT("pathWidth"),
+          "pathWidth",
+          "number",
+          'min="4" max="120"',
+        ) +
+        '<div class="path-editor-actions"><button class="button" type="button" id="add-path-point">' +
+        managerT("addPathPoint") +
+        '</button><button class="button" type="button" id="remove-path-point">' +
+        managerT("removePathPoint") +
+        '</button></div><p class="path-editor-help">' +
+        managerT("pathEditorHelp") +
+        "</p>"
       : field("X", "x", "number", 'min="0"') +
         field("Y", "y", "number", 'min="0"') +
         field(managerT("width"), "width", "number", 'min="1"') +
         field(managerT("height"), "height", "number", 'min="1"')) +
-    field(managerT("color"), "color", "color") +
+    (item.type === "label" ? "" : field(managerT("color"), "color", "color")) +
     (item.type !== "tree"
       ? field(managerT("fontSize"), "fontSize", "number", 'min="6" max="72"') +
         field(managerT("textColor"), "textColor", "color")
@@ -923,7 +1150,8 @@ function renderLayers() {
       managerT("types." + item.type) +
       "</small></span></button>";
     row.querySelector(".layer-select").addEventListener("click", (event) => {
-      if (event.ctrlKey || event.metaKey || event.shiftKey) toggleSelected(item.id);
+      if (event.ctrlKey || event.metaKey || event.shiftKey)
+        toggleSelected(item.id);
       else selectOnly(item.id);
       renderAll();
     });
@@ -956,7 +1184,9 @@ function renderLayers() {
       if (!movedIds.length || movedIds.includes(item.id)) return;
       const before = snapshot();
       const moved = layerOrder.filter((entry) => movedIds.includes(entry.id));
-      const reordered = layerOrder.filter((entry) => !movedIds.includes(entry.id));
+      const reordered = layerOrder.filter(
+        (entry) => !movedIds.includes(entry.id),
+      );
       const targetIndex = reordered.findIndex((entry) => entry.id === item.id);
       if (targetIndex < 0) return;
       reordered.splice(targetIndex, 0, ...moved);
@@ -984,11 +1214,11 @@ function renderPalette() {
     // renderable and routable, but do not offer them for new map designs.
     .filter((type) => type !== "walkway")
     .forEach((type) => {
-    const button = document.createElement("button");
-    button.className = "button";
-    button.textContent = "+ " + managerT("types." + type);
-    button.addEventListener("click", () => addElement(type));
-    palette.append(button);
+      const button = document.createElement("button");
+      button.className = "button";
+      button.textContent = "+ " + managerT("types." + type);
+      button.addEventListener("click", () => addElement(type));
+      palette.append(button);
     });
 }
 function addElement(type) {
@@ -1002,20 +1232,29 @@ function addElement(type) {
     boothId: type === "booth" ? "NEW" + count : "",
     zone: type === "booth" ? "A" : "",
     label_lo: "",
-    label_en: type === "path" ? "" : managerT("types." + type),
+    label_en:
+      type === "path" || type === "icon" ? "" : managerT("types." + type),
     x: snap(layout.width / 2 - meta.width / 2),
     y: snap(layout.height / 2 - meta.height / 2),
     width: meta.width,
     height: meta.height,
     color: meta.color,
-    fontSize: 12,
-    textColor: type === "booth" ? "#425066" : "#334155",
+    fontSize: type === "label" ? 18 : 12,
+    textColor:
+      type === "booth" ? "#425066" : type === "label" ? "#1e293b" : "#334155",
     shape: "rectangle",
+    ...(type === "icon" ? { iconId: "" } : {}),
     ...(type === "path"
       ? {
           points: [
-            { x: snap(layout.width / 2 - meta.width / 2), y: snap(layout.height / 2) },
-            { x: snap(layout.width / 2 + meta.width / 2), y: snap(layout.height / 2) },
+            {
+              x: snap(layout.width / 2 - meta.width / 2),
+              y: snap(layout.height / 2),
+            },
+            {
+              x: snap(layout.width / 2 + meta.width / 2),
+              y: snap(layout.height / 2),
+            },
           ],
           pathWidth: 28,
         }
@@ -1027,7 +1266,7 @@ function addElement(type) {
 }
 function zoomAt(nextScale, clientX, clientY) {
   const oldScale = camera.scale,
-    scale = Math.min(5, Math.max(1, nextScale));
+    scale = Math.min(20, Math.max(1, nextScale));
   if (scale === oldScale) return;
   const anchor =
     clientX === undefined
@@ -1167,6 +1406,7 @@ canvas.addEventListener("pointerdown", (event) => {
     startedAt: performance.now(),
   });
   const pathPoint = event.target.closest("[data-path-point-id]"),
+    rotationHandle = event.target.closest("[data-rotate-id]"),
     handle = event.target.closest("[data-resize-id]"),
     group = event.target.closest("[data-id]"),
     point = eventPoint(event);
@@ -1205,7 +1445,10 @@ canvas.addEventListener("pointerdown", (event) => {
     event.pointerType === "touch" &&
     camera.scale <= 1 &&
     !panMode &&
-    (Boolean(pathPoint) || Boolean(handle) || selectedIds.has(group?.dataset.id));
+    (Boolean(pathPoint) ||
+      Boolean(rotationHandle) ||
+      Boolean(handle) ||
+      selectedIds.has(group?.dataset.id));
   // At 100%, a touch on a new element still scrolls the page. After the
   // element is selected, its next drag (or a resize handle) edits the map.
   if (
@@ -1219,7 +1462,12 @@ canvas.addEventListener("pointerdown", (event) => {
       startX: event.clientX,
       startY: event.clientY,
       clientY: event.clientY,
-      targetId: pathPoint?.dataset.pathPointId || handle?.dataset.resizeId || group?.dataset.id || null,
+      targetId:
+        pathPoint?.dataset.pathPointId ||
+        rotationHandle?.dataset.rotateId ||
+        handle?.dataset.resizeId ||
+        group?.dataset.id ||
+        null,
     };
     canvas.setPointerCapture(event.pointerId);
     return;
@@ -1236,9 +1484,36 @@ canvas.addEventListener("pointerdown", (event) => {
     canvas.setPointerCapture(event.pointerId);
     return;
   }
+  if (rotationHandle) {
+    event.preventDefault();
+    const target = layout.elements.find(
+      (item) => item.id === rotationHandle.dataset.rotateId,
+    );
+    if (!target) return;
+    selectOnly(target.id);
+    const center = {
+      x: target.x + target.width / 2,
+      y: target.y + target.height / 2,
+    };
+    interaction = {
+      kind: "rotate",
+      pointerId: event.pointerId,
+      center,
+      startAngle: angleFromCenter(point, center),
+      item: structuredClone(target),
+      before: snapshot(),
+    };
+    canvas.setPointerCapture(event.pointerId);
+    renderCanvas();
+    renderInspector();
+    renderLayers();
+    return;
+  }
   if (pathPoint) {
     event.preventDefault();
-    const path = layout.elements.find((item) => item.id === pathPoint.dataset.pathPointId);
+    const path = layout.elements.find(
+      (item) => item.id === pathPoint.dataset.pathPointId,
+    );
     if (!path || path.type !== "path") return;
     selectOnly(path.id);
     interaction = {
@@ -1344,7 +1619,7 @@ canvas.addEventListener("pointermove", (event) => {
       clientY: (first.clientY + second.clientY) / 2,
     };
     const scale = Math.min(
-      5,
+      20,
       Math.max(1, (interaction.scale * distance) / interaction.distance),
     );
     camera.scale = scale;
@@ -1391,7 +1666,9 @@ canvas.addEventListener("pointermove", (event) => {
     );
     const minY = Math.max(...interaction.items.map((entry) => -entry.y));
     const maxY = Math.min(
-      ...interaction.items.map((entry) => layout.height - entry.height - entry.y),
+      ...interaction.items.map(
+        (entry) => layout.height - entry.height - entry.y,
+      ),
     );
     const deltaX = Math.max(minX, Math.min(maxX, requestedX));
     const deltaY = Math.max(minY, Math.min(maxY, requestedY));
@@ -1420,11 +1697,30 @@ canvas.addEventListener("pointermove", (event) => {
     };
     syncPathBounds(item);
     renderCanvas();
+  } else if (interaction.kind === "rotate" && item) {
+    const currentAngle = angleFromCenter(eventPoint(event), interaction.center);
+    const delta = currentAngle - interaction.startAngle;
+    if (item.type === "path") {
+      item.points = interaction.item.points.map((pathPoint) =>
+        rotatePoint(pathPoint, interaction.center, delta),
+      );
+      item.rotation = 0;
+      syncPathBounds(item);
+    } else {
+      item.rotation = normalizeRotation(
+        (Number(interaction.item.rotation) || 0) + (delta * 180) / Math.PI,
+      );
+    }
+    renderCanvas();
   } else if (interaction.kind === "resize" && item) {
     const point = eventPoint(event);
     const start = interaction.item;
     const corner = interaction.corner;
-    if (item.type === "tree") {
+    if (
+      item.type === "tree" ||
+      item.type === "landmark" ||
+      item.type === "icon"
+    ) {
       const resizeFromRight = corner.includes("e");
       const resizeFromBottom = corner.includes("s");
       const anchorX = resizeFromRight ? start.x : start.x + start.width;
@@ -1547,28 +1843,33 @@ inspector.addEventListener("input", (event) => {
   const item = selected(),
     key = event.target.dataset.key;
   if (!item || !key) return;
-  item[key] = ["x", "y", "width", "height", "fontSize", "pathWidth"].includes(key)
+  item[key] = ["x", "y", "width", "height", "fontSize", "pathWidth"].includes(
+    key,
+  )
     ? key === "fontSize"
       ? Math.min(72, Math.max(6, Number(event.target.value) || 12))
       : key === "pathWidth"
         ? Math.min(120, Math.max(4, Number(event.target.value) || 28))
-      : Math.max(1, Number(event.target.value) || 1)
+        : Math.max(1, Number(event.target.value) || 1)
     : key === "zone"
       ? event.target.value.trim().toUpperCase()
       : event.target.value;
   if (key === "zone") ensureZoneColor(item.zone);
+  if (key === "iconId") item.iconId = cleanIconId(event.target.value);
   renderCanvas();
 });
 inspector.addEventListener("change", (event) => {
   const item = selected(),
     key = event.target.dataset.key;
   if (item && key) {
-    item[key] = ["x", "y", "width", "height", "fontSize", "pathWidth"].includes(key)
+    item[key] = ["x", "y", "width", "height", "fontSize", "pathWidth"].includes(
+      key,
+    )
       ? key === "fontSize"
         ? Math.min(72, Math.max(6, Number(event.target.value) || 12))
         : key === "pathWidth"
           ? Math.min(120, Math.max(4, Number(event.target.value) || 28))
-        : Math.max(1, Number(event.target.value) || 1)
+          : Math.max(1, Number(event.target.value) || 1)
       : key === "zone"
         ? event.target.value.trim().toUpperCase()
         : event.target.value;
@@ -1577,7 +1878,7 @@ inspector.addEventListener("change", (event) => {
   }
   if (editStart && !equal(editStart, layout)) remember(editStart);
   editStart = null;
-  if (key === "zone") renderAll();
+  if (key === "zone" || key === "iconId") renderAll();
 });
 inspector.addEventListener("click", (event) => {
   if (event.target.id === "add-path-point") {
@@ -1587,8 +1888,17 @@ inspector.addEventListener("click", (event) => {
     const end = item.points.at(-1);
     const previous = item.points.at(-2) || end;
     item.points.push({
-      x: Math.max(0, Math.min(layout.width, snap(end.x + (end.x - previous.x || layout.gridSize * 8)))),
-      y: Math.max(0, Math.min(layout.height, snap(end.y + (end.y - previous.y)))),
+      x: Math.max(
+        0,
+        Math.min(
+          layout.width,
+          snap(end.x + (end.x - previous.x || layout.gridSize * 8)),
+        ),
+      ),
+      y: Math.max(
+        0,
+        Math.min(layout.height, snap(end.y + (end.y - previous.y))),
+      ),
     });
     syncPathBounds(item);
     remember(before);
@@ -1718,7 +2028,9 @@ document.querySelector("#remove-background").addEventListener("click", () => {
 document.querySelector("#save-map").addEventListener("click", () => {
   saveMapLayout(layout);
   document.dispatchEvent(
-    new CustomEvent("eventmap:save-layout", { detail: compactMapLayout(layout) }),
+    new CustomEvent("eventmap:save-layout", {
+      detail: compactMapLayout(layout),
+    }),
   );
   message.textContent = managerT("saving");
 });
@@ -1809,10 +2121,7 @@ window.addEventListener("keydown", (event) => {
     canvas.classList.add("pan-mode");
     event.preventDefault();
   }
-  if (
-    (event.ctrlKey || event.metaKey) &&
-    !isEditingText
-  ) {
+  if ((event.ctrlKey || event.metaKey) && !isEditingText) {
     const key = event.key.toLowerCase();
     if (key === "c" && copySelectedElements()) {
       event.preventDefault();
@@ -1841,6 +2150,9 @@ onManagerLanguageChange(() => {
 });
 initialiseManagerLanguage();
 renderAll();
+loadIconImagesFromGoogleSheet()
+  .then(renderCanvas)
+  .catch(() => {});
 if (restoredDraft) {
   message.textContent = managerT("draftRestored");
 } else {

@@ -30,6 +30,7 @@ export const ELEMENT_TYPES = {
   tree: { color: "#2A7E19", width: 44, height: 44 },
   stage: { color: "#dbeafe", width: 220, height: 75 },
   label: { color: "#fef3c7", width: 140, height: 36 },
+  icon: { color: "#ffffff", width: 64, height: 64 },
   other: { color: "#e9d5ff", width: 90, height: 55 },
 };
 
@@ -143,6 +144,12 @@ function positiveNumber(value, fallback) {
   return Number.isFinite(number) && number > 0 ? number : fallback;
 }
 
+function normalizeRotation(value) {
+  const rotation = Number(value);
+  if (!Number.isFinite(rotation)) return 0;
+  return ((rotation % 360) + 360) % 360;
+}
+
 function normalizeBackgroundImage(value) {
   const source = String(value || "").trim();
   if (!source) return "";
@@ -205,6 +212,28 @@ function pathBounds(points, fallback) {
   };
 }
 
+export function cleanIconId(value) {
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9_-]/g, "")
+    .slice(0, 40);
+}
+
+// รหัสไอคอน -> URL รูปจาก Drive (ไม่ได้เก็บในชีต MapLayout)
+let iconImages = {};
+export function setIconImages(map) {
+  iconImages = {};
+  if (!map || typeof map !== "object") return;
+  Object.entries(map).forEach(([key, value]) => {
+    const url = String(value || "");
+    if (/^https:\/\//i.test(url)) iconImages[cleanIconId(key)] = url;
+  });
+}
+export function getIconImages() {
+  return iconImages;
+}
+
 /**
  * Makes an individual element safe for rendering without changing its
  * external schema. Unknown element types become "other".
@@ -246,6 +275,8 @@ function normalizeElement(element, index) {
     shape: ELEMENT_SHAPES.includes(element?.shape)
       ? element.shape
       : "rectangle",
+    rotation: normalizeRotation(element?.rotation),
+    ...(type === "icon" ? { iconId: cleanIconId(element?.iconId) } : {}),
     ...(type === "path"
       ? {
           points,
@@ -277,7 +308,12 @@ export function normalizeMapLayout(value) {
     backgroundImage: normalizeBackgroundImage(source.backgroundImage),
     backgroundOpacity: Math.min(
       1,
-      Math.max(0, Number.isFinite(Number(source.backgroundOpacity)) ? Number(source.backgroundOpacity) : 0.35),
+      Math.max(
+        0,
+        Number.isFinite(Number(source.backgroundOpacity))
+          ? Number(source.backgroundOpacity)
+          : 0.35,
+      ),
     ),
     backgroundLocked: source.backgroundLocked !== false,
     zoneColors: normalizeZoneColors(source?.zoneColors, normalizedElements),
@@ -328,6 +364,8 @@ export function compactMapLayout(layout) {
         item.textColor = el.textColor;
       }
       if (el.shape && el.shape !== "rectangle") item.shape = el.shape;
+      if (el.rotation) item.rotation = Math.round(el.rotation * 10) / 10;
+      if (el.type === "icon" && el.iconId) item.iconId = el.iconId;
       if (el.type === "path") {
         item.points = el.points.map((point) => ({
           x: Math.round(Number(point.x) * 10) / 10,
@@ -348,7 +386,10 @@ export function setMapLayout(layout, persist = false) {
   activeLayout = normalizeMapLayout(layout);
 
   if (persist) {
-    localStorage.setItem(MAP_SETTINGS_KEY, JSON.stringify(compactMapLayout(activeLayout)));
+    localStorage.setItem(
+      MAP_SETTINGS_KEY,
+      JSON.stringify(compactMapLayout(activeLayout)),
+    );
   }
 
   return activeLayout;

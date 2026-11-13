@@ -285,11 +285,19 @@ export function resetFilters() {
 }
 
 export function detailHTML(booth) {
+  const isPoi = booth.type === "stage" || booth.type === "other";
   const logo = getBoothLogo(booth);
-  const boothZone =
-    state.lang === "lo" ? `ໂຊນ ${booth.zone}` : `Zone ${booth.zone}`;
+  const boothZone = booth.zone
+    ? (state.lang === "lo" ? `ໂຊນ ${booth.zone}` : `Zone ${booth.zone}`)
+    : "";
   const boothText =
     state.lang === "lo" ? `ບູທ ${booth.id}` : `Booth ${booth.id}`;
+  const badgeText = isPoi
+    ? (booth.type === "stage" ? (state.lang === "lo" ? "ເວທີ" : "STAGE") : (state.lang === "lo" ? "ຈຸດສຳຄັນ" : "POI"))
+    : booth.id;
+  const subtitleText = isPoi
+    ? (boothZone || (booth.type === "stage" ? (state.lang === "lo" ? "ເວທີຫຼັກ" : "Main Stage") : (state.lang === "lo" ? "ຈຸດບໍລິການ" : "Point of Interest")))
+    : `${boothZone} · ${boothText}`;
   const categoryName = getCategoryName(booth.category);
   const images = getBoothImages(booth);
 
@@ -364,7 +372,7 @@ export function detailHTML(booth) {
 
   return `
     <div class="detail-top">
-      <span class="detail-badge">${booth.id}</span>
+      <span class="detail-badge">${escapeHTML(badgeText)}</span>
       <span class="detail-category">${escapeHTML(categoryName)}</span>
     </div>
 
@@ -379,7 +387,7 @@ export function detailHTML(booth) {
         </span>
         <div class="detail-title">
           <h2>${escapeHTML(booth.name)}</h2>
-          <p class="detail-subtitle">${boothZone} · ${boothText}</p>
+          <p class="detail-subtitle">${escapeHTML(subtitleText)}</p>
         </div>
       </header>
 
@@ -393,13 +401,17 @@ export function detailHTML(booth) {
       <div class="detail-facts">
         <div class="fact">
           ${icon("pin")}
-          <span><strong>${boothZone}</strong></span>|
-          <span><strong>${boothText}</strong></span>
+          <span><strong>${escapeHTML(subtitleText)}</strong></span>
         </div>
+        ${
+          booth.hours
+            ? `
         <div class="fact">
           ${icon("clock")}
           <span>${escapeHTML(booth.hours)}</span>
-        </div>
+        </div>`
+            : ""
+        }
         ${facebookHTML}
       </div>
     </div>
@@ -412,7 +424,7 @@ export function detailHTML(booth) {
     ${icon("pin")} ${state.lang === "lo" ? "ຂ້ອຍຢູ່ບ່ອນນີ້" : "I'm here"}
   </button>
   <button class="button" data-action="share">
-    ${icon("share")} ${t("shareBooth")}
+    ${icon("share")} ${isPoi ? (state.lang === "lo" ? "ແຊຣ໌ສະຖານທີ່" : "Share Location") : t("shareBooth")}
   </button>
 </div>
   `;
@@ -626,9 +638,12 @@ export async function shareBooth() {
 
   const url = new URL(location.href);
   url.hash = booth.id;
+  const isPoi = booth.type === "stage" || booth.type === "other";
   const zoneText = state.lang === "lo" ? "ໂຊນ" : "Zone";
   const boothText = state.lang === "lo" ? "ບູທ" : "Booth";
-  const text = `${booth.name} — ${zoneText} ${booth.zone}, ${boothText} ${booth.id}`;
+  const text = isPoi
+    ? `${booth.name} — ${url.href}`
+    : `${booth.name} — ${zoneText} ${booth.zone}, ${boothText} ${booth.id}`;
 
   if (!/^https?:$/.test(url.protocol)) {
     window.prompt(t("promptCopy"), text);

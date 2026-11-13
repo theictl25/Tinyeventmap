@@ -2,9 +2,9 @@ import { GOOGLE_SHEET_API } from "./config.js";
 
 import { setFeaturedShops, setEventInfo, setEvent } from "./state.js";
 
-import { setMapLayout } from "./map-layout.js";
+import { setMapLayout, setIconImages } from "./map-layout.js";
 
-const STORAGE_KEY = "eventmap_api_payload_v8";
+const STORAGE_KEY = "eventmap_api_payload_v9";
 
 function applyApiPayload(payload) {
   if (payload?.error) {
@@ -29,6 +29,7 @@ function applyApiPayload(payload) {
   if (payload?.mapLayout) {
     setMapLayout(payload.mapLayout);
   }
+  if (payload?.iconImages) setIconImages(payload.iconImages);
 
   return shops;
 }
@@ -78,17 +79,26 @@ export async function loadShopsFromGoogleSheet(onSuccessCallback) {
       const localResponse = await fetch(localCacheUrl, { cache: "no-store" });
       if (localResponse.ok) {
         const localData = await localResponse.json();
-        if (localData && !localData.error && (localData.booths || localData.eventInfo)) {
+        if (
+          localData &&
+          !localData.error &&
+          (localData.booths || localData.eventInfo)
+        ) {
           payload = localData;
           console.log("Loaded EventMap data from Local PHP Cache.");
         }
       }
     } catch (localError) {
-      console.debug("Local PHP cache unreachable, falling back to Google Sheet:", localError);
+      console.debug(
+        "Local PHP cache unreachable, falling back to Google Sheet:",
+        localError,
+      );
     }
 
     if (!payload) {
-      console.log("Loading EventMap data directly from Google Sheet (fallback)...");
+      console.log(
+        "Loading EventMap data directly from Google Sheet (fallback)...",
+      );
       const response = await fetch(GOOGLE_SHEET_API);
 
       if (!response.ok) {
@@ -153,6 +163,16 @@ export async function loadMapLayoutFromGoogleSheet() {
   }
 
   return setMapLayout(payload.mapLayout);
+}
+
+export async function loadIconImagesFromGoogleSheet() {
+  const response = await fetch(GOOGLE_SHEET_API + "?action=icons", {
+    cache: "no-store",
+  });
+  if (!response.ok) throw new Error(`HTTP ${response.status}`);
+  const payload = await response.json();
+  if (payload?.error) throw new Error(payload.error);
+  setIconImages(payload?.iconImages);
 }
 
 /**

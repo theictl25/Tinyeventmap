@@ -22,14 +22,16 @@ const copy = {
     fitBackground: "Fit to map",
     removeBackground: "Remove background",
     backgroundHelp: "Use an image URL for a permanent background.",
-    backgroundTooLarge: "This image is too large to save in Google Sheet. Upload it online and paste its URL instead.",
+    backgroundTooLarge:
+      "This image is too large to save in Google Sheet. Upload it online and paste its URL instead.",
     saveForEveryone: "Save for everyone",
     newBlankMap: "Start a new blank map",
     newMapConfirm: "Start a new blank map? Unsaved changes will be lost.",
     addElements: "Add elements",
     addHelp: "Add an item, then drag it on the grid.",
     mapBuilder: "Map Builder",
-    builderHint: "Select mode moves items. Use Pan map or hold Space to move around a zoomed map.",
+    builderHint:
+      "Select mode moves items. Use Pan map or hold Space to move around a zoomed map.",
     panMap: "Pan map",
     centerSelected: "Center map layout",
     layers: "Layers",
@@ -44,7 +46,8 @@ const copy = {
     canvasLabel: "Map editing area",
     properties: "Properties",
     selectElement: "Select an item on the map to edit it.",
-    multiSelectHint: "Multiple items selected. Drag one selected item to move them together.",
+    multiSelectHint:
+      "Multiple items selected. Drag one selected item to move them together.",
     laoName: "Lao name",
     englishName: "English name",
     boothId: "Booth ID",
@@ -59,16 +62,35 @@ const copy = {
     pathEditorHelp: "Drag the white points on the map to shape this route.",
     rotateWalkway: "Switch horizontal / vertical",
     shape: "Shape",
-    shapes: { rectangle: "Rectangle", circle: "Circle", triangle: "Triangle", hexagon: "Hexagon" },
+    shapes: {
+      rectangle: "Rectangle",
+      circle: "Circle",
+      triangle: "Triangle",
+      hexagon: "Hexagon",
+    },
     deleteElement: "Delete this item",
     saving: "Saving…",
     draftRestored: "Restored your unsaved map edits.",
     restored: "Template restored. Save to publish it.",
     saved: "Saved to Google Sheet.",
     saveFailed: "Save failed:",
-    invalidServerResponse: "Server returned an invalid response. Check PHP error logs.",
+    invalidServerResponse:
+      "Server returned an invalid response. Check PHP error logs.",
     saveFailedServer: "Save failed",
-    types: { booth: "Booth", walkway: "Walkway", path: "Walkway", entrance: "Entrance", exit: "Exit", tree: "Tree", stage: "Stage", label: "Label", other: "Other" },
+    types: {
+      booth: "Booth",
+      walkway: "Walkway",
+      path: "Walkway",
+      entrance: "Entrance",
+      exit: "Exit",
+      tree: "Tree",
+      stage: "Stage",
+      label: "Label",
+      icon: "Icon",
+      iconId: "Icon ID",
+      iconFolderHint: "Drive folder:",
+      other: "Other",
+    },
   },
   lo: {
     pageTitle: "ຈັດການແຜນທີ່ງານ",
@@ -91,14 +113,16 @@ const copy = {
     fitBackground: "ປັບໃຫ້ພໍດີກັບແຜນທີ່",
     removeBackground: "ລຶບຮູບພື້ນຫຼັງ",
     backgroundHelp: "ໃຊ້ URL ຮູບສຳລັບພື້ນຫຼັງຖາວອນ.",
-    backgroundTooLarge: "ຮູບນີ້ໃຫຍ່ເກີນກວ່າຈະບັນທຶກໃນ Google Sheet. ອັບໂຫຼດຮູບໄປອອນລາຍແລ້ວວາງ URL ແທນ.",
+    backgroundTooLarge:
+      "ຮູບນີ້ໃຫຍ່ເກີນກວ່າຈະບັນທຶກໃນ Google Sheet. ອັບໂຫຼດຮູບໄປອອນລາຍແລ້ວວາງ URL ແທນ.",
     saveForEveryone: "ບັນທຶກສຳລັບທຸກຄົນ",
     newBlankMap: "ເລີ່ມແຜນທີ່ວ່າງໃໝ່",
     newMapConfirm: "ເລີ່ມແຜນທີ່ວ່າງໃໝ່ບໍ? ການແກ້ໄຂທີ່ຍັງບໍ່ບັນທຶກຈະຫາຍໄປ.",
     addElements: "ເພີ່ມອົງປະກອບ",
     addHelp: "ເພີ່ມລາຍການ ແລ້ວລາກໄປໃສ່ເທິງ Grid.",
     mapBuilder: "ສ້າງແຜນທີ່",
-    builderHint: "ໂໝດເລືອກໃຊ້ຍ້າຍອົງປະກອບ. ໃຊ້ Pan map ຫຼື ກົດ Space ຄ້າງເພື່ອເລື່ອນແຜນທີ່ທີ່ຊູມແລ້ວ.",
+    builderHint:
+      "ໂໝດເລືອກໃຊ້ຍ້າຍອົງປະກອບ. ໃຊ້ Pan map ຫຼື ກົດ Space ຄ້າງເພື່ອເລື່ອນແຜນທີ່ທີ່ຊູມແລ້ວ.",
     panMap: "ເລື່ອນແຜນທີ່",
     centerSelected: "ຈັດອົງປະກອບທັງໝົດໄວ້ກາງແຜນທີ່",
     layers: "ລຳດັບຊັ້ນ",
@@ -113,7 +137,8 @@ const copy = {
     canvasLabel: "ພື້ນທີ່ແກ້ໄຂແຜນທີ່",
     properties: "ຄຸນສົມບັດ",
     selectElement: "ເລືອກອົງປະກອບໃນແຜນທີ່ເພື່ອແກ້ໄຂ.",
-    multiSelectHint: "ເລືອກຫຼາຍອົງປະກອບແລ້ວ. ລາກລາຍການທີ່ເລືອກເພື່ອຍ້າຍພ້ອມກັນ.",
+    multiSelectHint:
+      "ເລືອກຫຼາຍອົງປະກອບແລ້ວ. ລາກລາຍການທີ່ເລືອກເພື່ອຍ້າຍພ້ອມກັນ.",
     laoName: "ຊື່ພາສາລາວ",
     englishName: "ຊື່ພາສາອັງກິດ",
     boothId: "ລະຫັດບູທ",
@@ -128,7 +153,12 @@ const copy = {
     pathEditorHelp: "ລາກຈຸດສີຂາວເທິງແຜນທີ່ເພື່ອປັບຮູບເສັ້ນທາງ.",
     rotateWalkway: "ສະຫຼັບແນວນອນ / ແນວຕັ້ງ",
     shape: "ຮູບຊົງ",
-    shapes: { rectangle: "ສີ່ຫຼ່ຽມ", circle: "ວົງມົນ", triangle: "ສາມຫຼ່ຽມ", hexagon: "ຫົກຫຼ່ຽມ" },
+    shapes: {
+      rectangle: "ສີ່ຫຼ່ຽມ",
+      circle: "ວົງມົນ",
+      triangle: "ສາມຫຼ່ຽມ",
+      hexagon: "ຫົກຫຼ່ຽມ",
+    },
     deleteElement: "ລຶບອົງປະກອບນີ້",
     saving: "ກຳລັງບັນທຶກ…",
     draftRestored: "ກູ້ຄືນການແກ້ໄຂແຜນທີ່ທີ່ຍັງບໍ່ໄດ້ບັນທຶກແລ້ວ.",
@@ -137,7 +167,20 @@ const copy = {
     saveFailed: "ບັນທຶກບໍ່ສຳເລັດ:",
     invalidServerResponse: "ເຊີບເວີຕອບກັບບໍ່ຖືກຕ້ອງ. ກວດສອບ PHP error logs.",
     saveFailedServer: "ບັນທຶກບໍ່ສຳເລັດ",
-    types: { booth: "ບູທ", walkway: "ທາງຍ່າງ", path: "ທາງຍ່າງ", entrance: "ທາງເຂົ້າ", exit: "ທາງອອກ", tree: "ຕົ້ນໄມ້", stage: "ເວທີ", label: "ປ້າຍຊື່", other: "ອື່ນໆ" },
+    types: {
+      booth: "ບູທ",
+      walkway: "ທາງຍ່າງ",
+      path: "ທາງຍ່າງ",
+      entrance: "ທາງເຂົ້າ",
+      exit: "ທາງອອກ",
+      tree: "ຕົ້ນໄມ້",
+      stage: "ເວທີ",
+      label: "ປ້າຍຊື່",
+      icon: "ໄອຄອນ",
+      other: "ອື່ນໆ",
+    },
+    iconId: "ລະຫັດໄອຄອນ",
+    iconFolderHint: "ໂຟນເດີໃນ Drive:",
   },
 };
 
@@ -145,7 +188,9 @@ let language = localStorage.getItem(STORAGE_KEY) === "lo" ? "lo" : "en";
 const listeners = new Set();
 
 export function managerT(key) {
-  const value = key.split(".").reduce((item, part) => item?.[part], copy[language]);
+  const value = key
+    .split(".")
+    .reduce((item, part) => item?.[part], copy[language]);
   return typeof value === "string" ? value : key;
 }
 
@@ -167,7 +212,10 @@ export function setManagerLanguage(nextLanguage) {
     element.textContent = managerT(element.dataset.managerI18n);
   });
   document.querySelectorAll("[data-manager-i18n-aria]").forEach((element) => {
-    element.setAttribute("aria-label", managerT(element.dataset.managerI18nAria));
+    element.setAttribute(
+      "aria-label",
+      managerT(element.dataset.managerI18nAria),
+    );
   });
   document.querySelectorAll(".lang-btn").forEach((button) => {
     const active = button.dataset.lang === language;
@@ -179,7 +227,9 @@ export function setManagerLanguage(nextLanguage) {
 
 export function initialiseManagerLanguage() {
   document.querySelectorAll(".lang-btn").forEach((button) => {
-    button.addEventListener("click", () => setManagerLanguage(button.dataset.lang));
+    button.addEventListener("click", () =>
+      setManagerLanguage(button.dataset.lang),
+    );
   });
   setManagerLanguage(language);
 }

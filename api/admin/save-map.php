@@ -75,6 +75,11 @@ function compact_layout(array $layout): array
     if (!empty($el['shape']) && $el['shape'] !== 'rectangle') {
       $item['shape'] = (string)$el['shape'];
     }
+    if (isset($el['rotation']) && is_numeric($el['rotation'])) {
+      $rotation = fmod((float)$el['rotation'], 360.0);
+      if ($rotation < 0) $rotation += 360.0;
+      if ($rotation != 0.0) $item['rotation'] = round($rotation, 1);
+    }
     if ($type === 'path' && isset($el['points']) && is_array($el['points'])) {
       $points = [];
       foreach ($el['points'] as $point) {
@@ -90,6 +95,11 @@ function compact_layout(array $layout): array
       }
       $item['pathWidth'] = round(max(4, min(120, (float)($el['pathWidth'] ?? 28))), 1);
     }
+    
+    if ($type === 'icon' && !empty($el['iconId'])) {
+      $item['iconId'] = substr(preg_replace('/[^a-z0-9_-]/', '', strtolower((string)$el['iconId'])), 0, 40);
+    }
+
     $elements[] = $item;
   }
 

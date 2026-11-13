@@ -20,7 +20,7 @@ export const MAP_WIDTH = mapSettings.width;
 export const MAP_HEIGHT = mapSettings.height;
 
 export const MAP_CONFIG = {
-  maxScaleMultiplier: 5,
+  maxScaleMultiplier: 20,
   edgePadding: 0,
   zoomButtonFactor: 1.25,
   wheelSensitivity: 0.0025,
