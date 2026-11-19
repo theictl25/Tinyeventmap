@@ -16,6 +16,9 @@ function doGet(e) {
     if (action === "getStats") {
       return handleGetStats();
     }
+    if (action === "icons") {
+      return jsonResponse({ iconImages: buildIconImages_() });
+    }
 
     const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
     const boothsSheet = spreadsheet.getSheetByName("Booths");
@@ -35,6 +38,7 @@ function doGet(e) {
       eventInfo: readEventInfo(eventInfoSheet),
       event: readEvent(eventSheet),
       mapLayout: readMapLayout(),
+      iconImages: buildIconImages_(),
     });
   } catch (error) {
     return jsonResponse({ error: String(error.message || error) });
@@ -109,11 +113,15 @@ function readBooths(sheet) {
   const result = {};
 
   data.slice(1).forEach((row) => {
-    const id = String(row[boothIdColumn] || "").trim().toUpperCase();
+    const id = String(row[boothIdColumn] || "")
+      .trim()
+      .toUpperCase();
     if (!id) return;
 
     const get = (field) =>
-      columns[field] === undefined ? "" : String(row[columns[field]] || "").trim();
+      columns[field] === undefined
+        ? ""
+        : String(row[columns[field]] || "").trim();
 
     result[id] = {
       name: get("name"),
@@ -274,7 +282,11 @@ function handleVisitorPing(params) {
     // Throttled sync to Google Sheet
     const lastSync = Number(props.getProperty("LAST_SHEET_SYNC") || 0);
     if (now - lastSync > 60000 || currentOnline >= peakCount) {
-      syncStatsToSheet(currentOnline, peakCount, Number(props.getProperty("TOTAL_VIEWS") || 0));
+      syncStatsToSheet(
+        currentOnline,
+        peakCount,
+        Number(props.getProperty("TOTAL_VIEWS") || 0),
+      );
       props.setProperty("LAST_SHEET_SYNC", String(now));
     }
 
@@ -285,7 +297,9 @@ function handleVisitorPing(params) {
     });
   } finally {
     if (hasLock) {
-      try { lock.releaseLock(); } catch (_) {}
+      try {
+        lock.releaseLock();
+      } catch (_) {}
     }
   }
 }
@@ -338,14 +352,16 @@ function syncStatsToSheet(online, peak, totalViews) {
     let statsSheet = spreadsheet.getSheetByName("Stats");
     if (!statsSheet) {
       statsSheet = spreadsheet.insertSheet("Stats");
-      statsSheet.getRange(1, 1, 1, 3).setValues([["Metric", "Value", "Last Updated"]]);
+      statsSheet
+        .getRange(1, 1, 1, 3)
+        .setValues([["Metric", "Value", "Last Updated"]]);
       statsSheet.getRange(1, 1, 1, 3).setFontWeight("bold");
     }
 
     const nowStr = Utilities.formatDate(
       new Date(),
       Session.getScriptTimeZone() || "GMT+7",
-      "yyyy-MM-dd HH:mm:ss"
+      "yyyy-MM-dd HH:mm:ss",
     );
 
     statsSheet.getRange(2, 1, 3, 3).setValues([
@@ -357,7 +373,6 @@ function syncStatsToSheet(online, peak, totalViews) {
     // Non-blocking: Spreadsheet quota or contention must not fail the request
   }
 }
-
 
 function thumb_(id, size) {
   return `https://drive.google.com/thumbnail?id=${id}&sz=w${size}`;
@@ -382,7 +397,11 @@ function scanDriveImages_() {
     while (files.hasNext()) {
       const f = files.next();
       if (!f.getMimeType().startsWith("image/")) continue;
-      list.push({ id: f.getId(), name: f.getName(), type: getImageType(f.getName()) });
+      list.push({
+        id: f.getId(),
+        name: f.getName(),
+        type: getImageType(f.getName()),
+      });
     }
 
     list.sort((a, b) => a.name.localeCompare(b.name));
@@ -397,11 +416,15 @@ function getDriveImages_(force) {
   if (!force) {
     const hit = cache.get(IMAGE_CACHE_KEY);
     if (hit) {
-      try { return JSON.parse(hit); } catch (_) {}
+      try {
+        return JSON.parse(hit);
+      } catch (_) {}
     }
   }
   const data = scanDriveImages_();
-  try { cache.put(IMAGE_CACHE_KEY, JSON.stringify(data), 60); } catch (_) {}
+  try {
+    cache.put(IMAGE_CACHE_KEY, JSON.stringify(data), 60);
+  } catch (_) {}
   return data;
 }
 
@@ -425,6 +448,20 @@ function mergeDriveImages_(booths) {
   return booths;
 }
 
+// โฟลเดอร์ชื่อ ICON_<รหัส> -> { "<รหัส>": url }
+function buildIconImages_() {
+  const drive = getDriveImages_(false);
+  const icons = {};
+  Object.keys(drive).forEach((key) => {
+    if (!key.startsWith("ICON_")) return;
+    const files = drive[key];
+    if (!files.length) return;
+    icons[key.slice(5).toLowerCase()] =
+      `https://lh3.googleusercontent.com/d/${files[0].id}`;
+  });
+  return icons;
+}
+
 // ---- ตั้งให้อัปเดตอัตโนมัติ ----
 function refreshImages() {
   getDriveImages_(true);
@@ -433,7 +470,9 @@ function refreshImages() {
 // รันครั้งเดียวจากหน้า Apps Script
 function setupImageAutoRefresh() {
   ScriptApp.getProjectTriggers()
-    .filter((t) => ["refreshImages", "syncBoothImages"].includes(t.getHandlerFunction()))
+    .filter((t) =>
+      ["refreshImages", "syncBoothImages"].includes(t.getHandlerFunction()),
+    )
     .forEach((t) => ScriptApp.deleteTrigger(t));
 
   ScriptApp.newTrigger("refreshImages").timeBased().everyMinutes(5).create();
@@ -453,6 +492,7 @@ function checkImageFolders() {
   const ids = Object.keys(readBooths(sheet));
   const drive = getDriveImages_(true);
   Object.keys(drive).forEach((id) => {
+    if (id.startsWith("ICON_")) return;
     if (!ids.includes(id)) Logger.log("โฟลเดอร์ไม่ตรงกับบูธใด: " + id);
   });
   ids.forEach((id) => {
@@ -460,18 +500,12 @@ function checkImageFolders() {
   });
 }
 
-
-
 function getImageType(fileName) {
   const name = fileName.toLowerCase();
 
-  if (
-    name.includes("logo") ||
-    name.includes("profile")
-  ) {
+  if (name.includes("logo") || name.includes("profile")) {
     return "logo";
   }
 
   return "image";
 }
-

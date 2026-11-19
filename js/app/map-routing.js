@@ -1,4 +1,4 @@
-import { getMapLayout } from "../shared/map-layout.js";
+import { getMapLayout, elementCenter, DEFAULT_MAP_WIDTH,DEFAULT_MAP_HEIGHT } from "../shared/map-layout.js";
 
 /*
  * Route planning uses the walkway rectangles drawn by Map Builder.
@@ -26,17 +26,17 @@ function samePoint(first, second) {
   );
 }
 
-function elementCenter(element) {
-  return point(element.x + element.width / 2, element.y + element.height / 2);
-}
-
 function walkwaySegment(walkway, index) {
   const middle = elementCenter(walkway);
   const horizontal = walkway.width >= walkway.height;
   const halfLength = (horizontal ? walkway.width : walkway.height) / 2;
-  const angle = ((Number(walkway.rotation) || 0) * Math.PI) / 180 +
+  const angle =
+    ((Number(walkway.rotation) || 0) * Math.PI) / 180 +
     (horizontal ? 0 : Math.PI / 2);
-  const delta = point(Math.cos(angle) * halfLength, Math.sin(angle) * halfLength);
+  const delta = point(
+    Math.cos(angle) * halfLength,
+    Math.sin(angle) * halfLength,
+  );
   return {
     id: "walkway-" + index,
     start: point(middle.x - delta.x, middle.y - delta.y),
@@ -59,24 +59,49 @@ function projectOntoSegment(location, segment) {
   const dy = segment.end.y - segment.start.y;
   const lengthSquared = dx * dx + dy * dy;
   const progress = lengthSquared
-    ? Math.max(0, Math.min(1, ((location.x - segment.start.x) * dx + (location.y - segment.start.y) * dy) / lengthSquared))
+    ? Math.max(
+        0,
+        Math.min(
+          1,
+          ((location.x - segment.start.x) * dx +
+            (location.y - segment.start.y) * dy) /
+            lengthSquared,
+        ),
+      )
     : 0;
-  return point(segment.start.x + dx * progress, segment.start.y + dy * progress);
+  return point(
+    segment.start.x + dx * progress,
+    segment.start.y + dy * progress,
+  );
 }
 
 function segmentIntersection(first, second) {
   const r = point(first.end.x - first.start.x, first.end.y - first.start.y);
   const s = point(second.end.x - second.start.x, second.end.y - second.start.y);
   const cross = r.x * s.y - r.y * s.x;
-  const offset = point(second.start.x - first.start.x, second.start.y - first.start.y);
+  const offset = point(
+    second.start.x - first.start.x,
+    second.start.y - first.start.y,
+  );
   if (Math.abs(cross) < 0.0001) {
-    return [first.start, first.end, second.start, second.end]
-      .find((candidate) => samePoint(projectOntoSegment(candidate, first), candidate) && samePoint(projectOntoSegment(candidate, second), candidate)) || null;
+    return (
+      [first.start, first.end, second.start, second.end].find(
+        (candidate) =>
+          samePoint(projectOntoSegment(candidate, first), candidate) &&
+          samePoint(projectOntoSegment(candidate, second), candidate),
+      ) || null
+    );
   }
   const firstProgress = (offset.x * s.y - offset.y * s.x) / cross;
   const secondProgress = (offset.x * r.y - offset.y * r.x) / cross;
-  return firstProgress >= -0.001 && firstProgress <= 1.001 && secondProgress >= -0.001 && secondProgress <= 1.001
-    ? point(first.start.x + firstProgress * r.x, first.start.y + firstProgress * r.y)
+  return firstProgress >= -0.001 &&
+    firstProgress <= 1.001 &&
+    secondProgress >= -0.001 &&
+    secondProgress <= 1.001
+    ? point(
+        first.start.x + firstProgress * r.x,
+        first.start.y + firstProgress * r.y,
+      )
     : null;
 }
 
@@ -136,9 +161,11 @@ function createGraph(segments) {
   segments.forEach((segment) => {
     const dx = segment.end.x - segment.start.x;
     const dy = segment.end.y - segment.start.y;
-    segment.nodes.sort((first, second) =>
-      (first.x - segment.start.x) * dx + (first.y - segment.start.y) * dy -
-      ((second.x - segment.start.x) * dx + (second.y - segment.start.y) * dy),
+    segment.nodes.sort(
+      (first, second) =>
+        (first.x - segment.start.x) * dx +
+        (first.y - segment.start.y) * dy -
+        ((second.x - segment.start.x) * dx + (second.y - segment.start.y) * dy),
     );
 
     for (let index = 1; index < segment.nodes.length; index += 1) {
@@ -260,15 +287,38 @@ function directFromPoint(start, target) {
   };
 }
 
+export function getRouteWalkwayWidth(layout = getMapLayout()) {
+  const elements = layout?.elements || [];
+  const paths = elements.filter(
+    (e) => e.type === "path" && Number(e.pathWidth) > 0,
+  );
+  if (paths.length > 0) {
+    const sum = paths.reduce((acc, p) => acc + Number(p.pathWidth), 0);
+    return sum / paths.length;
+  }
+  const walkways = elements.filter((e) => e.type === "walkway");
+  if (walkways.length > 0) {
+    const sum = walkways.reduce(
+      (acc, w) => acc + Math.min(Number(w.width) || 40, Number(w.height) || 40),
+      0,
+    );
+    return sum / walkways.length;
+  }
+  return 28;
+}
+
 /**
  * @param {object} booth   บูทปลายทาง
  * @param {object} [origin] บูทหรือพิกัด {x,y} ที่ใช้เป็นจุดเริ่ม (ถ้าไม่ส่ง = ใช้ทางเข้าใกล้สุด)
  */
 export function findRouteToBooth(booth, origin = null) {
   const layout = getMapLayout();
+  const walkwayWidth = getRouteWalkwayWidth(layout);
   const entrances = layout.elements.filter((e) => e.type === "entrance");
   const walkways = layout.elements.filter((e) => e.type === "walkway");
-  const paths = layout.elements.filter((e) => e.type === "path" && e.points?.length >= 2);
+  const paths = layout.elements.filter(
+    (e) => e.type === "path" && e.points?.length >= 2,
+  );
   const segments = [
     ...walkways.map(walkwaySegment),
     ...paths.flatMap(pathSegments),
@@ -283,16 +333,23 @@ export function findRouteToBooth(booth, origin = null) {
         : point(origin.x, origin.y);
 
     if (!segments.length) {
-      return { entrance: null, ...directFromPoint(start, target) };
+      return {
+        entrance: null,
+        ...directFromPoint(start, target),
+        walkwayWidth,
+      };
     }
     const route =
       routeFromPoint(start, target, segments) || directFromPoint(start, target);
-    return { entrance: null, ...route };
+    return { entrance: null, ...route, walkwayWidth };
   }
 
   // ---- โหมดเดิม (ไม่เปลี่ยน) ----
   if (!entrances.length) return null;
-  if (!segments.length) return directFallback(entrances, booth);
+  if (!segments.length) {
+    const fallback = directFallback(entrances, booth);
+    return fallback ? { ...fallback, walkwayWidth } : null;
+  }
   const targetConnection = nearestWalkwayPoint(target, segments);
   addSegmentNode(targetConnection.segment, targetConnection.point);
 
@@ -318,12 +375,13 @@ export function findRouteToBooth(booth, origin = null) {
         length:
           entranceConnection.length + route.length + targetConnection.length,
         followsWalkway: true,
+        walkwayWidth,
       };
     })
     .filter(Boolean);
 
-  return (
-    candidates.sort((a, b) => a.length - b.length)[0] ||
-    directFallback(entrances, booth)
-  );
+  const best = candidates.sort((a, b) => a.length - b.length)[0];
+  if (best) return best;
+  const fallback = directFallback(entrances, booth);
+  return fallback ? { ...fallback, walkwayWidth } : null;
 }

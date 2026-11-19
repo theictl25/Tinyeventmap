@@ -255,7 +255,7 @@ export function injectMainContent() {
             <defs>
               <marker id="route-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5"
                 orient="auto-start-reverse">
-                <path d="M0 0 10 5 0 10Z" fill="#991b1e" />
+                <path d="M0,0 L10,5 L0,10 Z" fill="#991b1e" />
               </marker>
             </defs>
 

@@ -80,7 +80,8 @@ function compact_layout(array $layout): array
       if ($rotation < 0) $rotation += 360.0;
       if ($rotation != 0.0) $item['rotation'] = round($rotation, 1);
     }
-    if ($type === 'path' && isset($el['points']) && is_array($el['points'])) {
+    $isPolygon = ($el['shape'] ?? '') === 'polygon' && $type !== 'path';
+    if (($type === 'path' || $isPolygon) && isset($el['points']) && is_array($el['points'])) {
       $points = [];
       foreach ($el['points'] as $point) {
         if (!is_array($point) || !isset($point['x'], $point['y'])) continue;
@@ -90,12 +91,18 @@ function compact_layout(array $layout): array
           'y' => round((float)$point['y'], 1),
         ];
       }
-      if (count($points) >= 2) {
+      $minPoints = $type === 'path' ? 2 : 3;
+      if (count($points) >= $minPoints) {
         $item['points'] = $points;
+      } elseif ($isPolygon) {
+        // จุดไม่พอ: ถอยกลับเป็นสี่เหลี่ยม ไม่ให้เก็บ shape polygon ที่วาดไม่ได้
+        $item['shape'] = 'rectangle';
       }
+    }
+    if ($type === 'path') {
       $item['pathWidth'] = round(max(4, min(120, (float)($el['pathWidth'] ?? 28))), 1);
     }
-    
+
     if ($type === 'icon' && !empty($el['iconId'])) {
       $item['iconId'] = substr(preg_replace('/[^a-z0-9_-]/', '', strtolower((string)$el['iconId'])), 0, 40);
     }
@@ -119,6 +126,9 @@ function compact_layout(array $layout): array
   }
   if (isset($layout['backgroundLocked'])) {
     $result['backgroundLocked'] = (bool)$layout['backgroundLocked'];
+  }
+  if (!empty($layout['backgroundTransparent'])) {
+    $result['backgroundTransparent'] = true;
   }
 
   return $result;

@@ -523,12 +523,54 @@ p {
   padding: 0 10px;
   width: 92px;
 }
+
 .zone-filters {
   display: flex;
-  gap: 8px;
+  gap: 10px;
+
+  /* เลื่อนแนวนอน */
   overflow-x: auto;
-  padding: 2px 0 13px;
-  scrollbar-width: none;
+  overflow-y: hidden;
+
+  /* ระยะห่าง */
+  padding: 8px 2px 14px;
+
+  /* เลื่อนแบบนุ่มนวล */
+  scroll-behavior: smooth;
+  -webkit-overflow-scrolling: touch;
+
+  /* ป้องกันปุ่มถูกบีบ */
+  white-space: nowrap;
+}
+
+/* ป้องกันปุ่ม Zone หดตัว */
+.zone-filters > * {
+  flex-shrink: 0;
+}
+
+/* ปรับแต่ง Scrollbar สำหรับ Chrome, Edge */
+.zone-filters::-webkit-scrollbar {
+  height: 5px;
+}
+
+.zone-filters::-webkit-scrollbar-track {
+  background: #f1f1f1;
+  border-radius: 10px;
+}
+
+.zone-filters::-webkit-scrollbar-thumb {
+  background: #c5c5c5;
+  border-radius: 10px;
+}
+
+.zone-filters::-webkit-scrollbar-thumb:hover {
+  background: #888;
+}
+
+/* Firefox */
+.zone-filters {
+  scrollbar-width: thin;
+  scrollbar-color: #c5c5c5 #f1f1f1;
 }
 
 .zone-chip {
@@ -1694,11 +1736,6 @@ All Booths page
     max-width: 190px;
     border-radius: 10px;
     font-size: 11px;
-  }
-
-  .zone-filters {
-    gap: 7px;
-    padding: 1px 0 8px;
   }
 
   .zone-chip {

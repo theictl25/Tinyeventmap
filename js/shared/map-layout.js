@@ -9,7 +9,13 @@
 export const MAP_SETTINGS_KEY = "eventmap_map_layout_v2";
 export const DEFAULT_MAP_WIDTH = 800;
 export const DEFAULT_MAP_HEIGHT = 900;
-export const ELEMENT_SHAPES = ["rectangle", "circle", "triangle", "hexagon"];
+export const ELEMENT_SHAPES = [
+  "rectangle",
+  "circle",
+  "triangle",
+  "hexagon",
+  "polygon",
+];
 export const DEFAULT_ZONE_COLORS = {
   A: "#ffebee",
   B: "#fff5cc",
@@ -21,10 +27,10 @@ const MAX_EMBEDDED_BACKGROUND_LENGTH = 16000;
 
 export const ELEMENT_TYPES = {
   booth: { color: "#ffebee", width: 70, height: 48 },
-  walkway: { color: "#f1f5f9", width: 220, height: 45 },
+  walkway: { color: "#ccd5df", width: 220, height: 45 },
   // New walkways are drawn with the Path Editor. The older rectangular
   // `walkway` type remains supported so saved event maps stay compatible.
-  path: { color: "#f1f5f9", width: 200, height: 40 },
+  path: { color: "#ccd5df", width: 200, height: 40 },
   entrance: { color: "#dcfce7", width: 90, height: 42 },
   exit: { color: "#ffe4e6", width: 90, height: 42 },
   tree: { color: "#2A7E19", width: 44, height: 44 },
@@ -110,7 +116,7 @@ export function defaultMapLayout() {
         y: 760,
         width: 640,
         height: 30,
-        color: "#f1f5f9",
+        color: "#ccd5df",
       },
       {
         id: "entrance-1",
@@ -234,6 +240,23 @@ export function getIconImages() {
   return iconImages;
 }
 
+const NO_POLYGON_TYPES = ["path", "tree", "walkway", "label", "icon"];
+export const canBePolygon = (type) => !NO_POLYGON_TYPES.includes(type);
+
+function normalizePolygonPoints(points, x, y, width, height) {
+  const normalized = (Array.isArray(points) ? points : [])
+    .map((p) => ({ x: Number(p?.x), y: Number(p?.y) }))
+    .filter((p) => Number.isFinite(p.x) && Number.isFinite(p.y));
+  if (normalized.length >= 3) return normalized;
+  // ยังไม่มีจุด: เริ่มจากมุมทั้ง 4 ของสี่เหลี่ยมเดิม
+  return [
+    { x, y },
+    { x: x + width, y },
+    { x: x + width, y: y + height },
+    { x, y: y + height },
+  ];
+}
+
 /**
  * Makes an individual element safe for rendering without changing its
  * external schema. Unknown element types become "other".
@@ -248,11 +271,41 @@ function normalizeElement(element, index) {
   };
   const width = positiveNumber(element?.width, defaults.width);
   const height = positiveNumber(element?.height, defaults.height);
+
+  let shape = ELEMENT_SHAPES.includes(element?.shape)
+    ? element.shape
+    : "rectangle";
+  if (shape === "polygon" && !canBePolygon(type)) shape = "rectangle";
+  const isPolygon = shape === "polygon";
+
   const points =
     type === "path"
       ? normalizePathPoints(element?.points, fallback, width, height)
-      : undefined;
-  const bounds = type === "path" ? pathBounds(points, {}) : {};
+      : isPolygon
+        ? normalizePolygonPoints(
+            element?.points,
+            fallback.x,
+            fallback.y,
+            width,
+            height,
+          )
+        : undefined;
+  const bounds = points ? pathBounds(points, {}) : {};
+  let rotation = normalizeRotation(element?.rotation);
+  if (isPolygon && rotation && points) {
+    const b = pathBounds(points, {});
+    const cx = b.x + b.width / 2,
+      cy = b.y + b.height / 2;
+    const a = (rotation * Math.PI) / 180;
+    const cos = Math.cos(a),
+      sin = Math.sin(a);
+    points.forEach((p, i) => {
+      const dx = p.x - cx,
+        dy = p.y - cy;
+      points[i] = { x: cx + dx * cos - dy * sin, y: cy + dx * sin + dy * cos };
+    });
+    rotation = 0;
+  }
 
   return {
     id: String(element?.id || type + "-" + (index + 1)),
@@ -261,30 +314,23 @@ function normalizeElement(element, index) {
     zone: String(element?.zone || ""),
     label_lo: String(element?.label_lo || ""),
     label_en: String(element?.label_en || ""),
-    x: type === "path" ? bounds.x : fallback.x,
-    y: type === "path" ? bounds.y : fallback.y,
-    width: type === "path" ? bounds.width : width,
-    height: type === "path" ? bounds.height : height,
+    x: points ? bounds.x : fallback.x,
+    y: points ? bounds.y : fallback.y,
+    width: points ? bounds.width : width,
+    height: points ? bounds.height : height,
     color: String(element?.color || defaults.color),
-    fontSize: Math.min(72, Math.max(6, positiveNumber(element?.fontSize, 12))),
+    fontSize: Math.max(1, positiveNumber(element?.fontSize, 12)),
     textColor: /^#[0-9a-f]{6}$/i.test(String(element?.textColor || ""))
       ? String(element.textColor)
       : type === "booth"
         ? "#425066"
         : "#334155",
-    shape: ELEMENT_SHAPES.includes(element?.shape)
-      ? element.shape
-      : "rectangle",
+    shape,
     rotation: normalizeRotation(element?.rotation),
     ...(type === "icon" ? { iconId: cleanIconId(element?.iconId) } : {}),
+    ...(points ? { points } : {}),
     ...(type === "path"
-      ? {
-          points,
-          pathWidth: Math.min(
-            120,
-            Math.max(4, positiveNumber(element?.pathWidth, 28)),
-          ),
-        }
+      ? { pathWidth: Math.max(1, positiveNumber(element?.pathWidth, 28)) }
       : {}),
   };
 }
@@ -316,6 +362,9 @@ export function normalizeMapLayout(value) {
       ),
     ),
     backgroundLocked: source.backgroundLocked !== false,
+    backgroundTransparent:
+      source.backgroundTransparent === true ||
+      source.backgroundTransparent === "true",
     zoneColors: normalizeZoneColors(source?.zoneColors, normalizedElements),
     elements: normalizedElements,
   };
@@ -346,6 +395,9 @@ export function compactMapLayout(layout) {
     backgroundImage: normalized.backgroundImage,
     backgroundOpacity: normalized.backgroundOpacity,
     backgroundLocked: normalized.backgroundLocked,
+    ...(normalized.backgroundTransparent
+      ? { backgroundTransparent: true }
+      : {}),
     zoneColors: normalized.zoneColors,
     elements: normalized.elements.map((el) => {
       const item = { id: el.id, type: el.type };
@@ -366,11 +418,13 @@ export function compactMapLayout(layout) {
       if (el.shape && el.shape !== "rectangle") item.shape = el.shape;
       if (el.rotation) item.rotation = Math.round(el.rotation * 10) / 10;
       if (el.type === "icon" && el.iconId) item.iconId = el.iconId;
-      if (el.type === "path") {
+      if (el.points && (el.type === "path" || el.shape === "polygon")) {
         item.points = el.points.map((point) => ({
           x: Math.round(Number(point.x) * 10) / 10,
           y: Math.round(Number(point.y) * 10) / 10,
         }));
+      }
+      if (el.type === "path") {
         item.pathWidth = Math.round(Number(el.pathWidth) * 10) / 10;
       }
       return item;
@@ -403,4 +457,60 @@ export function resetMapLayout() {
   localStorage.removeItem(MAP_SETTINGS_KEY);
   activeLayout = defaultMapLayout();
   return activeLayout;
+}
+
+export function elementCenter(item) {
+  const box = { x: item.x + item.width / 2, y: item.y + item.height / 2 };
+  const pts =
+    item.shape === "polygon" &&
+    Array.isArray(item.points) &&
+    item.points.length >= 3
+      ? item.points
+      : null;
+  if (!pts) return box;
+
+  // จุดศูนย์ถ่วงของรูป
+  let area = 0,
+    cx = 0,
+    cy = 0;
+  pts.forEach((p, i) => {
+    const q = pts[(i + 1) % pts.length];
+    const f = p.x * q.y - q.x * p.y;
+    area += f;
+    cx += (p.x + q.x) * f;
+    cy += (p.y + q.y) * f;
+  });
+  area /= 2;
+  if (Math.abs(area) < 1e-6) return box;
+  const c = { x: cx / (6 * area), y: cy / (6 * area) };
+
+  const inside = (pt) => {
+    let r = false;
+    for (let i = 0, j = pts.length - 1; i < pts.length; j = i++) {
+      const a = pts[i],
+        b = pts[j];
+      if (
+        a.y > pt.y !== b.y > pt.y &&
+        pt.x < ((b.x - a.x) * (pt.y - a.y)) / (b.y - a.y) + a.x
+      )
+        r = !r;
+    }
+    return r;
+  };
+  if (inside(c)) return c;
+
+  // รูปเว้ามาก จุดศูนย์ถ่วงตกนอกรูป: ใช้กลางของช่วงที่กว้างที่สุดตามแนวนอน
+  const xs = [];
+  pts.forEach((a, i) => {
+    const b = pts[(i + 1) % pts.length];
+    if (a.y > c.y !== b.y > c.y)
+      xs.push(a.x + ((c.y - a.y) / (b.y - a.y)) * (b.x - a.x));
+  });
+  xs.sort((m, n) => m - n);
+  let best = null;
+  for (let i = 0; i + 1 < xs.length; i += 2) {
+    if (!best || xs[i + 1] - xs[i] > best[1] - best[0])
+      best = [xs[i], xs[i + 1]];
+  }
+  return best ? { x: (best[0] + best[1]) / 2, y: c.y } : box;
 }

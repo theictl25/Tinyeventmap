@@ -15,11 +15,25 @@ import {
   updateBoothByIdMap,
 } from "../shared/state.js";
 import { t } from "./i18n.js";
-import { getMapLayout, getIconImages } from "../shared/map-layout.js";
+import {
+  getMapLayout,
+  getIconImages,
+  DEFAULT_MAP_WIDTH,
+  DEFAULT_MAP_HEIGHT,
+} from "../shared/map-layout.js";
 
 function mapSize() {
   const layout = getMapLayout();
   return { width: layout.width, height: layout.height };
+}
+
+function getMaxScaleMultiplier(size) {
+  const dimensionRatio = Math.max(
+    size.width / DEFAULT_MAP_WIDTH,
+    size.height / DEFAULT_MAP_HEIGHT,
+    1,
+  );
+  return MAP_CONFIG.maxScaleMultiplier * dimensionRatio;
 }
 
 export function svgElement(tag, attributes = {}, text) {
@@ -45,6 +59,7 @@ export function addBooth(
   boothId = "",
   mapLabel = "",
   rotation = 0,
+  points = null,
 ) {
   const id = String(boothId || zone + String(number).padStart(2, "0")).trim();
   const shop = featuredShops[id] || {};
@@ -76,11 +91,22 @@ export function addBooth(
     fontSize,
     textColor,
     rotation,
+    points,
     description: shop?.description || t("defaultDesc"),
     hours: shop?.hours || t("defaultHours"),
     facebook: String(shop?.facebook ?? "").trim(),
     featured: Boolean(shop),
   });
+}
+
+function findShop(item) {
+  const keys = [item.id, item.boothId, item.iconId]
+    .filter(Boolean)
+    .flatMap((key) => [key, String(key).toUpperCase()]);
+  for (const key of keys) {
+    if (featuredShops[key]) return featuredShops[key];
+  }
+  return null;
 }
 
 export function buildMapData(populateCategoryDropdownCb) {
@@ -110,19 +136,22 @@ export function buildMapData(populateCategoryDropdownCb) {
           booth.label_lo ||
           id,
         booth.rotation,
+        booth.points,
       );
     });
 
   updateBoothByIdMap();
 
   layout.elements
-    .filter((element) => element.type === "stage" || element.type === "other")
+    .filter(
+      (element) =>
+        element.type === "stage" ||
+        element.type === "other" ||
+        element.type === "icon",
+    )
     .forEach((item) => {
       const id = item.id;
-      const rawShop =
-        featuredShops[id] ||
-        (item.boothId ? featuredShops[item.boothId] : null) ||
-        {};
+      const rawShop = findShop(item) || {};
       const defaultLabel =
         (state.lang === "lo" ? item.label_lo : item.label_en) ||
         item.label_en ||
@@ -132,8 +161,8 @@ export function buildMapData(populateCategoryDropdownCb) {
             ? "ເວທີຫຼັກ"
             : "Main Stage"
           : state.lang === "lo"
-            ? "ຈຸດສຳຄັນ"
-            : "Point of Interest");
+            ? "ອື່ນໆ"
+            : "Other");
       const name = rawShop.name || defaultLabel;
       const category =
         rawShop.category ||
@@ -169,8 +198,8 @@ export function buildMapData(populateCategoryDropdownCb) {
         shape: item.shape || "rectangle",
         name,
         category,
-        logo: rawShop.logo || "",
-        customLogo: rawShop.logo || "",
+        logo: rawShop.logo || getIconImages()[item.iconId] || "",
+        customLogo: rawShop.logo || getIconImages()[item.iconId] || "",
         images: Array.isArray(rawShop.images) ? rawShop.images : [],
         color: item.color || "#dbeafe",
         fontSize: item.fontSize || 12,
@@ -180,6 +209,7 @@ export function buildMapData(populateCategoryDropdownCb) {
         hours,
         facebook: String(rawShop.facebook ?? "").trim(),
         featured: Boolean(rawShop && rawShop.name),
+        points: item.points || null,
       };
 
       boothById.set(id, poiItem);
@@ -214,6 +244,17 @@ function mapShape(item, attributes) {
       width: item.width,
       height: item.height,
       stroke: "none",
+    });
+  }
+  if (
+    item.shape === "polygon" &&
+    Array.isArray(item.points) &&
+    item.points.length >= 3
+  ) {
+    return svgElement("polygon", {
+      ...attributes,
+      points: item.points.map((p) => `${p.x},${p.y}`).join(" "),
+      "stroke-linejoin": "round",
     });
   }
   if (item.shape === "circle") {
@@ -377,7 +418,17 @@ function appendTree(group, item) {
 }
 function appendIcon(group, item) {
   const src = getIconImages()[item.iconId];
-  if (!src) return; // ยังไม่ได้อัปโหลด: ไม่แสดงอะไรให้ผู้เข้าชมเห็น
+  if (!src) return;
+  // พื้นที่รับการกดเท่าขนาดไอคอน
+  group.append(
+    svgElement("rect", {
+      x: item.x,
+      y: item.y,
+      width: item.width,
+      height: item.height,
+      fill: "transparent",
+    }),
+  );
   const image = svgElement("image", {
     href: src,
     x: item.x,
@@ -553,6 +604,12 @@ export function renderMap(applyFiltersCb) {
   const layout = getMapLayout();
   $("#map-background")?.setAttribute("width", size.width);
   $("#map-background")?.setAttribute("height", size.height);
+  const bgRect = $("#map-background");
+  if (bgRect) {
+    bgRect.setAttribute("fill", layout.backgroundTransparent ? "none" : "#fff");
+    // ถ้า CSS ตั้งสีไว้ ให้ inline style ชนะ
+    bgRect.style.fill = layout.backgroundTransparent ? "none" : "";
+  }
   const backgroundImage = $("#map-background-image");
   if (backgroundImage) {
     backgroundImage.setAttribute("width", size.width);
@@ -577,7 +634,10 @@ export function renderMap(applyFiltersCb) {
   getMapLayout()
     .elements.filter((item) => item.type !== "booth")
     .forEach((item) => {
-      const isInteractive = item.type === "stage" || item.type === "other";
+      const isInteractive =
+        item.type === "stage" ||
+        item.type === "other" ||
+        (item.type === "icon" && Boolean(getIconImages()[item.iconId]));
       const itemId = item.id;
       const centerX = item.x + item.width / 2;
       const centerY = item.y + item.height / 2;
@@ -998,7 +1058,7 @@ export function fitMap() {
 
   const size = mapSize();
   state.minScale = Math.min(width / size.width, height / size.height) * 0.95;
-  state.maxScale = state.minScale * MAP_CONFIG.maxScaleMultiplier;
+  state.maxScale = state.minScale * getMaxScaleMultiplier(size);
   state.scale = state.minScale;
   state.x = (width - size.width * state.scale) / 2;
   state.y = (height - size.height * state.scale) / 2;
@@ -1014,12 +1074,28 @@ export function centerBooth(booth) {
   const height = viewport.clientHeight;
   if (!width || !height) return;
 
-  const scale = clamp(state.minScale * 2.2, state.minScale, state.maxScale);
+  const isMobile = !desktopQuery.matches;
+
+  // ให้บูทกินสัดส่วนของ viewport ประมาณนี้ (มือถือน้อยกว่า = ซูมน้อยกว่า)
+  const targetFill = isMobile ? 0.22 : 0.3;
+  const boothSize = Math.max(booth.width, booth.height, 1);
+  const desired = (Math.min(width, height) * targetFill) / boothSize;
+
+  // เพดานซูมเทียบกับ fit scale (มือถือจำกัดไว้ต่ำกว่า)
+  const maxFocus = state.minScale * (isMobile ? 1.6 : 2.4);
+  const minFocus = state.minScale * 1.15;
+
+  let scale = clamp(desired, minFocus, maxFocus);
+  scale = clamp(scale, state.minScale, state.maxScale);
+
+  // ถ้าผู้ใช้ซูมลึกกว่านี้อยู่แล้ว ไม่ต้องซูมเข้าเพิ่ม
+  if (state.scale > scale) scale = state.scale;
+
   const boothCenterX = booth.x + booth.width / 2;
   const boothCenterY = booth.y + booth.height / 2;
 
   const x = width / 2 - boothCenterX * scale;
-  const y = height / 2 - boothCenterY * scale;
+  const y = height * (isMobile ? 0.35 : 0.5) - boothCenterY * scale;
 
   animateTo(x, y, scale);
 }
@@ -1491,11 +1567,9 @@ export function setupMapInteractions() {
     // }
     if (isTap && selectedId && selectBoothRef) {
       if (state.selected === selectedId && clearSelectionRef) {
-        // กด booth เดิมซ้ำ -> ยกเลิกการเลือก
         clearSelectionRef();
       } else {
-        const isMobile = !desktopQuery.matches;
-        selectBoothRef(selectedId, true, isMobile);
+        selectBoothRef(selectedId, true, true);
       }
     }
   }
@@ -1605,7 +1679,7 @@ export function setupMapInteractions() {
       state.minScale > 0 && Math.abs(state.scale / state.minScale - 1) < 0.01;
     state.minScale = Math.min(width / size.width, height / size.height) * 0.95;
 
-    state.maxScale = state.minScale * MAP_CONFIG.maxScaleMultiplier;
+    state.maxScale = state.minScale * getMaxScaleMultiplier(size);
 
     state.scale = wasFitted
       ? state.minScale

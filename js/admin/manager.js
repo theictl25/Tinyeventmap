@@ -1,4 +1,6 @@
 import {
+  DEFAULT_MAP_WIDTH,
+  DEFAULT_MAP_HEIGHT,
   DEFAULT_NEW_ZONE_COLOR,
   DEFAULT_ZONE_COLORS,
   ELEMENT_TYPES,
@@ -10,6 +12,7 @@ import {
   saveMapLayout,
   cleanIconId,
   getIconImages,
+  canBePolygon,
 } from "../shared/map-layout.js";
 import {
   loadMapLayoutFromGoogleSheet,
@@ -113,6 +116,7 @@ let pageScrollFrame = null;
 let pendingPageScroll = 0;
 let loadingTouch = null;
 let backgroundOpacityStart = null;
+let lastAddedPoint = null; // { id, index }
 
 const layoutSourceCopy = {
   en: {
@@ -264,7 +268,7 @@ function pasteCopiedElements() {
       0,
       Math.min(layout.height - copy.height, copy.y + offsetY),
     );
-    if (copy.type === "path") {
+    if (hasPoints(copy)) {
       copy.points = copy.points.map((point) => ({
         x: point.x + offsetX,
         y: point.y + offsetY,
@@ -439,7 +443,16 @@ function itemLabelMarkup(item, centerX, centerY, verticalWalkway) {
     "</text>"
   );
 }
+function getMaxScale() {
+  const dimensionRatio = Math.max(
+    (layout?.width || DEFAULT_MAP_WIDTH) / DEFAULT_MAP_WIDTH,
+    (layout?.height || DEFAULT_MAP_HEIGHT) / DEFAULT_MAP_HEIGHT,
+    1,
+  );
+  return 20 * dimensionRatio;
+}
 function clampCamera() {
+  camera.scale = Math.min(getMaxScale(), Math.max(1, camera.scale));
   const viewWidth = layout.width / camera.scale,
     viewHeight = layout.height / camera.scale;
   camera.x = Math.min(
@@ -465,7 +478,7 @@ function updateViewBox() {
   zoomLabel.textContent = Math.round(camera.scale * 100) + "%";
   document.querySelector("#manager-zoom-out").disabled = camera.scale <= 1;
   const zoomInBtn = document.querySelector("#manager-zoom-in");
-  if (zoomInBtn) zoomInBtn.disabled = camera.scale >= 20;
+  if (zoomInBtn) zoomInBtn.disabled = camera.scale >= getMaxScale();
 }
 function scheduleCameraPaint() {
   if (cameraPaintFrame !== null) return;
@@ -582,8 +595,31 @@ function pathMarkup(points) {
   const last = points.at(-1);
   return `${d} L ${last.x} ${last.y}`;
 }
+
+const hasPoints = (item) =>
+  item?.type === "path" ||
+  (item?.shape === "polygon" &&
+    Array.isArray(item.points) &&
+    item.points.length >= 3);
+
+const tx = (key, en, lo) => {
+  const value = managerT(key);
+  if (value && value !== key) return value;
+  return managerLanguage() === "lo" ? lo : en;
+};
+
+function bakeRotation(item) {
+  const rot = Number(item.rotation) || 0;
+  if (!rot || !hasPoints(item)) return;
+  const center = { x: item.x + item.width / 2, y: item.y + item.height / 2 };
+  const angle = (rot * Math.PI) / 180;
+  item.points = item.points.map((p) => rotatePoint(p, center, angle));
+  item.rotation = 0;
+  syncPathBounds(item);
+}
+
 function syncPathBounds(item) {
-  if (item.type !== "path" || !item.points?.length) return;
+  if (!hasPoints(item) || !item.points?.length) return;
   const xs = item.points.map((point) => point.x);
   const ys = item.points.map((point) => point.y);
   item.x = Math.min(...xs);
@@ -591,6 +627,56 @@ function syncPathBounds(item) {
   item.width = Math.max(1, Math.max(...xs) - item.x);
   item.height = Math.max(1, Math.max(...ys) - item.y);
 }
+
+function applyShapeChange(item) {
+  if (item.shape === "polygon" && canBePolygon(item.type)) {
+    if (!Array.isArray(item.points) || item.points.length < 3) {
+      item.points = [
+        { x: item.x, y: item.y },
+        { x: item.x + item.width, y: item.y },
+        { x: item.x + item.width, y: item.y + item.height },
+        { x: item.x, y: item.y + item.height },
+      ];
+      // ฝังการหมุนเดิมลงในจุด แล้วตั้ง rotation เป็น 0
+      const rot = Number(item.rotation) || 0;
+      if (rot) {
+        const center = {
+          x: item.x + item.width / 2,
+          y: item.y + item.height / 2,
+        };
+        const angle = (rot * Math.PI) / 180;
+        item.points = item.points.map((p) => rotatePoint(p, center, angle));
+        item.rotation = 0;
+      }
+    }
+    syncPathBounds(item);
+  } else if (item.type !== "path") {
+    delete item.points;
+  }
+}
+
+function addPolygonPoint(item) {
+  // แทรกจุดใหม่กลางด้านที่ยาวที่สุด
+  const pts = item.points;
+  let best = 0,
+    bestLen = -1;
+  pts.forEach((p, i) => {
+    const n = pts[(i + 1) % pts.length];
+    const len = Math.hypot(n.x - p.x, n.y - p.y);
+    if (len > bestLen) {
+      bestLen = len;
+      best = i;
+    }
+  });
+  const a = pts[best],
+    b = pts[(best + 1) % pts.length];
+  pts.splice(best + 1, 0, {
+    x: Math.round(((a.x + b.x) / 2) * 10) / 10,
+    y: Math.round(((a.y + b.y) / 2) * 10) / 10,
+  });
+  return best + 1;
+}
+
 function ensureZoneColor(zone) {
   layout.zoneColors ||= {};
   const key = String(zone || "")
@@ -788,6 +874,19 @@ function shapeMarkup(item, fill) {
       "</text>"
     );
   }
+  if (
+    item.shape === "polygon" &&
+    Array.isArray(item.points) &&
+    item.points.length >= 3
+  ) {
+    return (
+      '<polygon points="' +
+      item.points.map((p) => p.x + "," + p.y).join(" ") +
+      '" fill="' +
+      fill +
+      '" stroke-linejoin="round"/>'
+    );
+  }
   if (item.shape === "circle")
     return (
       '<ellipse cx="' +
@@ -891,7 +990,9 @@ function renderCanvas() {
     layout.width +
     '" height="' +
     layout.height +
-    '" fill="#fff"/>' +
+    '" fill="' +
+    (layout.backgroundTransparent ? "none" : "#fff") +
+    '"/>' +
     background +
     '<rect class="builder-background" width="' +
     layout.width +
@@ -910,7 +1011,7 @@ function renderCanvas() {
           : labelCenterY;
     const verticalWalkway = item.type === "walkway" && item.height > item.width;
     const handle =
-      !active || selectedIds.size !== 1 || item.type === "path"
+      !active || selectedIds.size !== 1 || hasPoints(item)
         ? ""
         : ["nw", "ne", "sw", "se"]
             .map((corner) => {
@@ -935,8 +1036,18 @@ function renderCanvas() {
               );
             })
             .join("");
+    const pathPointRadius =
+      item.type === "path"
+        ? Math.max(
+            3,
+            Math.min(
+              Math.round((item.pathWidth || 28) * 0.35 * 10) / 10,
+              Math.max(3, (item.pathWidth || 28) / 2 - 2),
+            ),
+          )
+        : 7;
     const pathPoints =
-      active && selectedIds.size === 1 && item.type === "path"
+      active && selectedIds.size === 1 && hasPoints(item)
         ? item.points
             .map(
               (point, index) =>
@@ -948,7 +1059,9 @@ function renderCanvas() {
                 point.x +
                 '" cy="' +
                 point.y +
-                '" r="7"/>',
+                '" r="' +
+                pathPointRadius +
+                '"/>',
             )
             .join("")
         : "";
@@ -1054,16 +1167,18 @@ function renderInspector() {
     "<label>" +
     managerT("shape") +
     '<select data-key="shape">' +
-    ELEMENT_SHAPES.map(
-      (shape) =>
-        '<option value="' +
-        shape +
-        '"' +
-        (item.shape === shape ? " selected" : "") +
-        ">" +
-        managerT("shapes." + shape) +
-        "</option>",
-    ).join("") +
+    ELEMENT_SHAPES.filter((s) => s !== "polygon" || canBePolygon(item.type))
+      .map(
+        (shape) =>
+          '<option value="' +
+          shape +
+          '"' +
+          (item.shape === shape ? " selected" : "") +
+          ">" +
+          managerT("shapes." + shape) +
+          "</option>",
+      )
+      .join("") +
     "</select></label>";
   inspector.innerHTML =
     "<h2>" +
@@ -1095,12 +1210,7 @@ function renderInspector() {
       ? shapeField
       : "") +
     (item.type === "path"
-      ? field(
-          managerT("pathWidth"),
-          "pathWidth",
-          "number",
-          'min="4" max="120"',
-        ) +
+      ? field(managerT("pathWidth"), "pathWidth", "number", 'min="1"') +
         '<div class="path-editor-actions"><button class="button" type="button" id="add-path-point">' +
         managerT("addPathPoint") +
         '</button><button class="button" type="button" id="remove-path-point">' +
@@ -1108,13 +1218,25 @@ function renderInspector() {
         '</button></div><p class="path-editor-help">' +
         managerT("pathEditorHelp") +
         "</p>"
-      : field("X", "x", "number", 'min="0"') +
-        field("Y", "y", "number", 'min="0"') +
-        field(managerT("width"), "width", "number", 'min="1"') +
-        field(managerT("height"), "height", "number", 'min="1"')) +
+      : hasPoints(item)
+        ? '<div class="path-editor-actions"><button class="button" type="button" id="add-path-point">' +
+          tx("addPolygonPoint", "+ Add corner", "+ ເພີ່ມມຸມ") +
+          '</button><button class="button" type="button" id="remove-path-point">' +
+          tx("removePolygonPoint", "− Remove corner", "− ລຶບມຸມ") +
+          '</button></div><p class="path-editor-help">' +
+          tx(
+            "polygonHelp",
+            "Drag the round handles to move each corner.",
+            "ລາກຈຸດວົງມົນເພື່ອຍ້າຍແຕ່ລະມຸມ.",
+          ) +
+          "</p>"
+        : field("X", "x", "number", 'min="0"') +
+          field("Y", "y", "number", 'min="0"') +
+          field(managerT("width"), "width", "number", 'min="1"') +
+          field(managerT("height"), "height", "number", 'min="1"')) +
     (item.type === "label" ? "" : field(managerT("color"), "color", "color")) +
     (item.type !== "tree"
-      ? field(managerT("fontSize"), "fontSize", "number", 'min="6" max="72"') +
+      ? field(managerT("fontSize"), "fontSize", "number", 'min="1"') +
         field(managerT("textColor"), "textColor", "color")
       : "") +
     '<button class="button danger" id="delete-element">' +
@@ -1130,6 +1252,8 @@ function renderSettings() {
   backgroundOpacityValue.value = `${backgroundOpacityInput.value}%`;
   backgroundOpacityValue.textContent = backgroundOpacityValue.value;
   backgroundLockedInput.checked = layout.backgroundLocked;
+  const t = document.querySelector("#background-transparent");
+  if (t) t.checked = Boolean(layout.backgroundTransparent);
 }
 function renderLayers() {
   layersList.replaceChildren();
@@ -1266,7 +1390,7 @@ function addElement(type) {
 }
 function zoomAt(nextScale, clientX, clientY) {
   const oldScale = camera.scale,
-    scale = Math.min(20, Math.max(1, nextScale));
+    scale = Math.min(getMaxScale(), Math.max(1, nextScale));
   if (scale === oldScale) return;
   const anchor =
     clientX === undefined
@@ -1315,6 +1439,35 @@ function replaceEditorLayout(nextLayout, persistDraft = true) {
   else clearManagerDraft();
   renderAll();
 }
+
+const transparentBgLabel = document.createElement("label");
+transparentBgLabel.className =
+  backgroundLockedInput.closest("label")?.className || "";
+const transparentBgInput = document.createElement("input");
+transparentBgInput.type = "checkbox";
+transparentBgInput.id = "background-transparent";
+const transparentBgText = document.createElement("span");
+transparentBgLabel.append(transparentBgInput, " ", transparentBgText);
+(
+  backgroundLockedInput.closest("label") || backgroundOpacityInput.parentElement
+).insertAdjacentElement("afterend", transparentBgLabel);
+
+function updateTransparentLabel() {
+  transparentBgText.textContent = tx(
+    "transparentBackground",
+    "Transparent map background",
+    "ພື້ນຫຼັງແຜນທີ່ໂປ່ງໃສ",
+  );
+}
+onManagerLanguageChange(updateTransparentLabel);
+updateTransparentLabel();
+
+transparentBgInput.addEventListener("change", () => {
+  applyBackgroundChange(() => {
+    layout.backgroundTransparent = transparentBgInput.checked;
+  });
+});
+
 function addLayoutSourceButtons() {
   const newMapButton = document.querySelector("#new-map");
   if (!newMapButton) return;
@@ -1348,6 +1501,7 @@ function addLayoutSourceButtons() {
   onManagerLanguageChange(updateLabels);
   updateLabels();
 }
+
 async function loadGoogleSheetLayout(confirmReplace = false) {
   if (confirmReplace && !confirm(layoutCopy().confirm)) return;
 
@@ -1367,35 +1521,198 @@ async function loadGoogleSheetLayout(confirmReplace = false) {
     setMapLoading(false);
   }
 }
-function exportPNG() {
-  const svg = canvas.cloneNode(true);
-  svg.setAttribute("viewBox", "0 0 " + layout.width + " " + layout.height);
-  svg.setAttribute("width", layout.width);
-  svg.setAttribute("height", layout.height);
-  svg
-    .querySelectorAll(".resize-handle, .path-point-handle")
-    .forEach((node) => node.remove());
-  const image = new Image(),
-    source = new XMLSerializer().serializeToString(svg);
-  image.onload = () => {
-    const output = document.createElement("canvas"),
-      context = output.getContext("2d");
-    output.width = layout.width * 2;
-    output.height = layout.height * 2;
-    context.scale(2, 2);
-    context.fillStyle = "#fff";
-    context.fillRect(0, 0, layout.width, layout.height);
-    context.drawImage(image, 0, 0, layout.width, layout.height);
-    const link = document.createElement("a");
-    link.download = "event-map.png";
-    link.href = output.toDataURL("image/png");
-    link.click();
-    URL.revokeObjectURL(image.src);
-    message.textContent = managerT("exported");
-  };
-  image.src = URL.createObjectURL(
-    new Blob([source], { type: "image/svg+xml;charset=utf-8" }),
-  );
+async function toDataUrl(url) {
+  if (!url || typeof url !== "string" || url.startsWith("data:")) return url;
+
+  let absoluteUrl = url;
+  try {
+    absoluteUrl = new URL(url, window.location.href).href;
+  } catch (_) {}
+
+  try {
+    const res = await fetch(absoluteUrl, { mode: "cors" });
+    if (res.ok) {
+      const blob = await res.blob();
+      return await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve(reader.result);
+        reader.onerror = reject;
+        reader.readAsDataURL(blob);
+      });
+    }
+  } catch (_) {}
+
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.crossOrigin = "anonymous";
+    img.onload = () => {
+      try {
+        const tempCanvas = document.createElement("canvas");
+        tempCanvas.width = img.naturalWidth || img.width || 100;
+        tempCanvas.height = img.naturalHeight || img.height || 100;
+        const ctx = tempCanvas.getContext("2d");
+        ctx.drawImage(img, 0, 0);
+        resolve(tempCanvas.toDataURL("image/png"));
+      } catch (err) {
+        reject(err);
+      }
+    };
+    img.onerror = reject;
+    img.src = absoluteUrl;
+  });
+}
+
+async function exportPNG() {
+  const exportButton = document.querySelector("#export-map");
+  if (exportButton) exportButton.disabled = true;
+  message.textContent = managerT("exporting") || "Exporting PNG...";
+
+  const width = Number(layout.width) || DEFAULT_MAP_WIDTH;
+  const height = Number(layout.height) || DEFAULT_MAP_HEIGHT;
+
+  try {
+    const svg = canvas.cloneNode(true);
+    svg.setAttribute("xmlns", "http://www.w3.org/2000/svg");
+    svg.setAttribute("xmlns:xlink", "http://www.w3.org/1999/xlink");
+    svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
+    svg.setAttribute("width", width);
+    svg.setAttribute("height", height);
+
+    // Remove editing UI handles, rotation lines, and grid pattern
+    svg
+      .querySelectorAll(
+        ".resize-handle, .path-point-handle, .rotation-handle, .rotation-handle-line, .builder-background",
+      )
+      .forEach((node) => node.remove());
+    svg
+      .querySelectorAll(".selected")
+      .forEach((node) => node.classList.remove("selected"));
+    svg
+      .querySelectorAll('[stroke-dasharray="4 3"]')
+      .forEach((node) => node.remove());
+
+    // Inject SVG stylesheet so shapes, borders, and text fonts render identically to the preview
+    const style = document.createElementNS(
+      "http://www.w3.org/2000/svg",
+      "style",
+    );
+    style.textContent = `
+      .builder-item rect, .builder-item ellipse, .builder-item polygon {
+        stroke: #64748b;
+        stroke-width: 1.5;
+      }
+      .builder-item.type-tree rect, .builder-item.type-tree ellipse, .builder-item.type-tree polygon, .builder-item.type-tree path {
+        stroke: none !important;
+      }
+      .builder-item.type-walkway rect {
+        stroke: none !important;
+      }
+      .builder-item.type-path path {
+        stroke-linecap: round;
+        stroke-linejoin: round;
+      }
+      text {
+        font-family: Inter, "Noto Sans Lao", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      }
+    `;
+    svg.insertBefore(style, svg.firstChild);
+
+    // Inline images as data URLs so SVG loaded as an Image does not trigger cross-origin/network restrictions
+    const images = Array.from(svg.querySelectorAll("image"));
+    await Promise.all(
+      images.map(async (img) => {
+        const rawHref =
+          img.getAttribute("href") || img.getAttribute("xlink:href");
+        if (!rawHref || rawHref.startsWith("data:")) return;
+        try {
+          const dataUrl = await toDataUrl(rawHref);
+          if (dataUrl) {
+            img.setAttribute("href", dataUrl);
+            img.removeAttribute("xlink:href");
+          } else {
+            img.remove();
+          }
+        } catch (e) {
+          console.warn("Could not inline image for map export:", rawHref, e);
+          img.remove();
+        }
+      }),
+    );
+
+    const source = new XMLSerializer().serializeToString(svg);
+    const svgBlob = new Blob([source], {
+      type: "image/svg+xml;charset=utf-8",
+    });
+    const blobUrl = URL.createObjectURL(svgBlob);
+
+    try {
+      const image = new Image();
+      await new Promise((resolve, reject) => {
+        image.onload = () => resolve();
+        image.onerror = () => reject(new Error("Failed to render map image"));
+        image.src = blobUrl;
+      });
+
+      const scale = 2;
+      const output = document.createElement("canvas");
+      const context = output.getContext("2d");
+      output.width = width * scale;
+      output.height = height * scale;
+      if (!layout.backgroundTransparent) {
+        context.fillStyle = "#ffffff";
+        context.fillRect(0, 0, output.width, output.height);
+      }
+      context.drawImage(image, 0, 0, output.width, output.height);
+
+      const triggerDownload = (downloadUrl) => {
+        const link = document.createElement("a");
+        link.download = "event-map.png";
+        link.href = downloadUrl;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+      };
+
+      await new Promise((resolve, reject) => {
+        if (output.toBlob) {
+          output.toBlob((blob) => {
+            if (blob) {
+              const pngUrl = URL.createObjectURL(blob);
+              triggerDownload(pngUrl);
+              setTimeout(() => URL.revokeObjectURL(pngUrl), 2000);
+              resolve();
+            } else {
+              try {
+                const dataUrl = output.toDataURL("image/png");
+                triggerDownload(dataUrl);
+                resolve();
+              } catch (err) {
+                reject(err);
+              }
+            }
+          }, "image/png");
+        } else {
+          try {
+            const dataUrl = output.toDataURL("image/png");
+            triggerDownload(dataUrl);
+            resolve();
+          } catch (err) {
+            reject(err);
+          }
+        }
+      });
+
+      message.textContent = managerT("exported");
+    } finally {
+      URL.revokeObjectURL(blobUrl);
+    }
+  } catch (error) {
+    console.error("Export PNG failed:", error);
+    message.textContent =
+      `${managerT("exportFailed") || "Failed to export image."} ${error.message || ""}`.trim();
+  } finally {
+    if (exportButton) exportButton.disabled = false;
+  }
 }
 
 canvas.addEventListener("pointerdown", (event) => {
@@ -1514,7 +1831,8 @@ canvas.addEventListener("pointerdown", (event) => {
     const path = layout.elements.find(
       (item) => item.id === pathPoint.dataset.pathPointId,
     );
-    if (!path || path.type !== "path") return;
+    if (!path || !hasPoints(path)) return;
+    bakeRotation(path);
     selectOnly(path.id);
     interaction = {
       kind: "path-point",
@@ -1619,7 +1937,7 @@ canvas.addEventListener("pointermove", (event) => {
       clientY: (first.clientY + second.clientY) / 2,
     };
     const scale = Math.min(
-      20,
+      getMaxScale(),
       Math.max(1, (interaction.scale * distance) / interaction.distance),
     );
     camera.scale = scale;
@@ -1675,7 +1993,7 @@ canvas.addEventListener("pointermove", (event) => {
     interaction.items.forEach((entry) => {
       const target = layout.elements.find((element) => element.id === entry.id);
       if (!target) return;
-      if (target.type === "path") {
+      if (hasPoints(target)) {
         target.points = entry.points.map((pathPoint) => ({
           x: pathPoint.x + deltaX,
           y: pathPoint.y + deltaY,
@@ -1687,20 +2005,20 @@ canvas.addEventListener("pointermove", (event) => {
       }
     });
     renderCanvas();
-  } else if (interaction.kind === "path-point" && item?.type === "path") {
+  } else if (interaction.kind === "path-point" && hasPoints(item)) {
     const point = eventPoint(event);
     const index = interaction.index;
-    if (!item.points[index]) return;
+    const sn = event.altKey ? (v) => v : snap;
     item.points[index] = {
-      x: Math.max(0, Math.min(layout.width, snap(point.x))),
-      y: Math.max(0, Math.min(layout.height, snap(point.y))),
+      x: Math.max(0, Math.min(layout.width, sn(point.x))),
+      y: Math.max(0, Math.min(layout.height, sn(point.y))),
     };
     syncPathBounds(item);
     renderCanvas();
   } else if (interaction.kind === "rotate" && item) {
     const currentAngle = angleFromCenter(eventPoint(event), interaction.center);
     const delta = currentAngle - interaction.startAngle;
-    if (item.type === "path") {
+    if (hasPoints(item)) {
       item.points = interaction.item.points.map((pathPoint) =>
         rotatePoint(pathPoint, interaction.center, delta),
       );
@@ -1847,9 +2165,9 @@ inspector.addEventListener("input", (event) => {
     key,
   )
     ? key === "fontSize"
-      ? Math.min(72, Math.max(6, Number(event.target.value) || 12))
+      ? Math.max(1, Number(event.target.value) || 12)
       : key === "pathWidth"
-        ? Math.min(120, Math.max(4, Number(event.target.value) || 28))
+        ? Math.max(1, Number(event.target.value) || 28)
         : Math.max(1, Number(event.target.value) || 1)
     : key === "zone"
       ? event.target.value.trim().toUpperCase()
@@ -1866,40 +2184,45 @@ inspector.addEventListener("change", (event) => {
       key,
     )
       ? key === "fontSize"
-        ? Math.min(72, Math.max(6, Number(event.target.value) || 12))
+        ? Math.max(1, Number(event.target.value) || 12)
         : key === "pathWidth"
-          ? Math.min(120, Math.max(4, Number(event.target.value) || 28))
+          ? Math.max(1, Number(event.target.value) || 28)
           : Math.max(1, Number(event.target.value) || 1)
       : key === "zone"
         ? event.target.value.trim().toUpperCase()
         : event.target.value;
     if (key === "zone") ensureZoneColor(item.zone);
+    if (key === "shape") applyShapeChange(item);
     renderCanvas();
   }
   if (editStart && !equal(editStart, layout)) remember(editStart);
   editStart = null;
-  if (key === "zone" || key === "iconId") renderAll();
+  if (key === "zone" || key === "iconId" || key === "shape") renderAll();
 });
 inspector.addEventListener("click", (event) => {
   if (event.target.id === "add-path-point") {
     const item = selected();
-    if (!item || item.type !== "path") return;
+    if (!item || !hasPoints(item)) return;
     const before = snapshot();
-    const end = item.points.at(-1);
-    const previous = item.points.at(-2) || end;
-    item.points.push({
-      x: Math.max(
-        0,
-        Math.min(
-          layout.width,
-          snap(end.x + (end.x - previous.x || layout.gridSize * 8)),
+    if (item.type === "path") {
+      const end = item.points.at(-1);
+      const previous = item.points.at(-2) || end;
+      item.points.push({
+        x: Math.max(
+          0,
+          Math.min(
+            layout.width,
+            snap(end.x + (end.x - previous.x || layout.gridSize * 8)),
+          ),
         ),
-      ),
-      y: Math.max(
-        0,
-        Math.min(layout.height, snap(end.y + (end.y - previous.y))),
-      ),
-    });
+        y: Math.max(
+          0,
+          Math.min(layout.height, snap(end.y + (end.y - previous.y))),
+        ),
+      });
+    } else {
+      lastAddedPoint = { id: item.id, index: addPolygonPoint(item) };
+    }
     syncPathBounds(item);
     remember(before);
     renderAll();
@@ -1907,9 +2230,20 @@ inspector.addEventListener("click", (event) => {
   }
   if (event.target.id === "remove-path-point") {
     const item = selected();
-    if (!item || item.type !== "path" || item.points.length <= 2) return;
+    const minPoints = item?.type === "path" ? 2 : 3;
+    if (!item || !hasPoints(item) || item.points.length <= minPoints) return;
     const before = snapshot();
-    item.points.pop();
+    if (
+      item.type !== "path" &&
+      lastAddedPoint?.id === item.id &&
+      lastAddedPoint.index < item.points.length
+    ) {
+      item.points.splice(lastAddedPoint.index, 1);
+    } else {
+      // ไม่มีจุดที่เพิ่งเพิ่ม: ลบจุดสุดท้ายเหมือนเดิม
+      item.points.pop();
+    }
+    lastAddedPoint = null;
     syncPathBounds(item);
     remember(before);
     renderAll();
@@ -2054,7 +2388,7 @@ document.querySelector("#center-element").addEventListener("click", () => {
   const offsetY = (layout.height - (bottom - top)) / 2 - top;
 
   layout.elements.forEach((item) => {
-    if (item.type === "path") {
+    if (hasPoints(item)) {
       item.points = item.points.map((point) => ({
         x: point.x + offsetX,
         y: point.y + offsetY,

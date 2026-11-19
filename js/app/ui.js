@@ -7,16 +7,21 @@ import {
 import { state, booths, boothElements, boothById } from "../shared/state.js";
 import { t, getCategoryName } from "./i18n.js";
 import { centerBooth, fitMap } from "./map.js";
-import { findRouteToBooth } from "./map-routing.js";
+import { findRouteToBooth, getRouteWalkwayWidth } from "./map-routing.js";
+import {
+  getMapLayout,
+  DEFAULT_MAP_WIDTH,
+  DEFAULT_MAP_HEIGHT,
+  elementCenter,
+} from "../shared/map-layout.js";
 
 let originBoothId = null; // บูทที่ผู้ใช้บอกว่า "ฉันอยู่ที่นี่"
 let pickingOrigin = false; // กำลังอยู่ในโหมดเลือกบูทหรือไม่
 const announce = $("#announcement");
 
-function roundedRoutePath(points) {
+function roundedRoutePath(points, radius = 18) {
   if (!Array.isArray(points) || points.length < 2) return "";
 
-  const radius = 18;
   let d = `M ${points[0].x} ${points[0].y}`;
   for (let index = 1; index < points.length - 1; index += 1) {
     const previous = points[index - 1];
@@ -30,8 +35,12 @@ function roundedRoutePath(points) {
     const before = Math.min(radius, beforeLength / 2);
     const after = Math.min(radius, afterLength / 2);
     const start = {
-      x: current.x + ((previous.x - current.x) / Math.max(1, beforeLength)) * before,
-      y: current.y + ((previous.y - current.y) / Math.max(1, beforeLength)) * before,
+      x:
+        current.x +
+        ((previous.x - current.x) / Math.max(1, beforeLength)) * before,
+      y:
+        current.y +
+        ((previous.y - current.y) / Math.max(1, beforeLength)) * before,
     };
     const end = {
       x: current.x + ((next.x - current.x) / Math.max(1, afterLength)) * after,
@@ -42,6 +51,26 @@ function roundedRoutePath(points) {
 
   const last = points.at(-1);
   return `${d} L ${last.x} ${last.y}`;
+}
+
+function trimPathEnd(points, trim) {
+  if (!Array.isArray(points) || points.length < 2) return points;
+
+  const pts = points.slice();
+  const a = pts[pts.length - 2];
+  const b = pts[pts.length - 1];
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  const len = Math.hypot(dx, dy);
+  if (len < 1) return pts;
+
+  // กันไม่ให้ตัดเกินช่วงสุดท้ายของเส้น
+  const t = Math.min(trim, len * 0.6);
+  pts[pts.length - 1] = {
+    x: b.x - (dx / len) * t,
+    y: b.y - (dy / len) * t,
+  };
+  return pts;
 }
 
 function getBoothLogo(booth) {
@@ -76,11 +105,23 @@ export function escapeHTML(value) {
       })[character],
   );
 }
-const PIN_SCALE = 0.6; // แก้ขนาดหมุดทั้ง 2 อันที่นี่ที่เดียว
+function getPinScale() {
+  const layout = getMapLayout();
+  const dimensionRatio = Math.max(
+    (Number(layout?.width) || DEFAULT_MAP_WIDTH) / DEFAULT_MAP_WIDTH,
+    (Number(layout?.height) || DEFAULT_MAP_HEIGHT) / DEFAULT_MAP_HEIGHT,
+    1,
+  );
+  const walkwayWidth = getRouteWalkwayWidth(layout);
+  const walkwayRatio = walkwayWidth / 28;
+  const ratio = Math.max(dimensionRatio, walkwayRatio);
+  return Math.round(0.6 * ratio * 100) / 100;
+}
 
 function pinMarkup(color) {
+  const scale = getPinScale();
   return `
-    <g transform="scale(${PIN_SCALE})">
+    <g transform="scale(${scale})">
       <path d="M0 0 C0 0 -20 -26 -20 -40 C-20 -51 -12 -60 0 -60 C12 -60 20 -51 20 -40 C20 -26 0 0 0 0 Z"
             fill="${color}" stroke="#fff" stroke-width="5" stroke-linejoin="round"
             paint-order="stroke"/>
@@ -285,18 +326,34 @@ export function resetFilters() {
 }
 
 export function detailHTML(booth) {
-  const isPoi = booth.type === "stage" || booth.type === "other";
+  const isPoi =
+    booth.type === "stage" || booth.type === "other" || booth.type === "icon";
   const logo = getBoothLogo(booth);
   const boothZone = booth.zone
-    ? (state.lang === "lo" ? `ໂຊນ ${booth.zone}` : `Zone ${booth.zone}`)
+    ? state.lang === "lo"
+      ? `ໂຊນ ${booth.zone}`
+      : `Zone ${booth.zone}`
     : "";
   const boothText =
     state.lang === "lo" ? `ບູທ ${booth.id}` : `Booth ${booth.id}`;
   const badgeText = isPoi
-    ? (booth.type === "stage" ? (state.lang === "lo" ? "ເວທີ" : "STAGE") : (state.lang === "lo" ? "ຈຸດສຳຄັນ" : "POI"))
+    ? booth.type === "stage"
+      ? state.lang === "lo"
+        ? "ເວທີ"
+        : "STAGE"
+      : state.lang === "lo"
+        ? "ອື່ນໆ"
+        : "Other"
     : booth.id;
   const subtitleText = isPoi
-    ? (boothZone || (booth.type === "stage" ? (state.lang === "lo" ? "ເວທີຫຼັກ" : "Main Stage") : (state.lang === "lo" ? "ຈຸດບໍລິການ" : "Point of Interest")))
+    ? boothZone ||
+      (booth.type === "stage"
+        ? state.lang === "lo"
+          ? "ເວທີຫຼັກ"
+          : "Main Stage"
+        : state.lang === "lo"
+          ? "ຈຸດບໍລິການ"
+          : "Point of Interest")
     : `${boothZone} · ${boothText}`;
   const categoryName = getCategoryName(booth.category);
   const images = getBoothImages(booth);
@@ -468,13 +525,11 @@ export function selectBooth(id, openMobile = false, center = false) {
   });
 
   const pin = $("#selection-pin");
+  const c = elementCenter(booth);
   if (pin) {
     pin.removeAttribute("hidden");
     pin.innerHTML = pinMarkup("#e8365d"); // สีแดง
-    pin.setAttribute(
-      "transform",
-      `translate(${booth.x + booth.width / 2} ${booth.y - 3})`,
-    );
+    pin.setAttribute("transform", `translate(${c.x} ${c.y})`);
   }
 
   if (center) centerBooth(booth);
@@ -561,8 +616,8 @@ export function clearSelectedBooth() {
 
 export function showDirections() {
   const booth = boothById.get(state.selected);
-  const originBooth = originBoothId ? boothById.get(originBoothId) : null;
-  const route = findRouteToBooth(booth, originBooth);
+  if (!booth) return;
+
   if (isBoothsPage) {
     const url = new URL("./index.php", location.href);
     url.hash = state.selected;
@@ -571,7 +626,12 @@ export function showDirections() {
     return;
   }
 
-  if (!booth) return;
+  const originBooth = originBoothId ? boothById.get(originBoothId) : null;
+  const route = findRouteToBooth(booth, originBooth);
+
+  // ปิด bottom sheet ทุกกรณี ทั้งมีและไม่มีเส้นทาง
+  closeDetailDialog();
+
   if (!route) {
     toast(
       state.lang === "lo"
@@ -583,10 +643,33 @@ export function showDirections() {
 
   const routePath = $("#route-path");
   if (routePath) {
+    const walkwayWidth = route.walkwayWidth || getRouteWalkwayWidth();
+    const strokeWidth = Math.max(4, Math.round(walkwayWidth * 0.35));
+    const dash = Math.round(strokeWidth * 1.5);
+    const cornerRadius = Math.max(18, Math.round(strokeWidth * 0.9));
+    const arrowLen = Math.round(strokeWidth * 3.2);
+    const arrowWidth = Math.round(strokeWidth * 3.0);
+
+    routePath.setAttribute("stroke-width", String(strokeWidth));
+    routePath.setAttribute("stroke-dasharray", `${dash} ${dash}`);
+    routePath.setAttribute("stroke-linecap", "butt");
     routePath.setAttribute(
       "d",
-      roundedRoutePath(route.points),
+      roundedRoutePath(trimPathEnd(route.points, arrowLen), cornerRadius),
     );
+
+    const routeArrow = $("#route-arrow");
+    if (routeArrow) {
+      routeArrow.setAttribute("viewBox", "0 0 10 10");
+      routeArrow.setAttribute("markerUnits", "userSpaceOnUse");
+      routeArrow.setAttribute("markerWidth", String(arrowLen));
+      routeArrow.setAttribute("markerHeight", String(arrowWidth));
+      routeArrow.setAttribute("preserveAspectRatio", "none");
+      routeArrow.setAttribute("orient", "auto");
+      routeArrow.setAttribute("overflow", "visible");
+      routeArrow.setAttribute("refX", "0"); // ฐานลูกศรอยู่ที่ปลายเส้นที่ตัดแล้ว
+      routeArrow.setAttribute("refY", "5");
+    }
   }
 
   resetFilters();
@@ -638,7 +721,8 @@ export async function shareBooth() {
 
   const url = new URL(location.href);
   url.hash = booth.id;
-  const isPoi = booth.type === "stage" || booth.type === "other";
+  const isPoi =
+    booth.type === "stage" || booth.type === "other" || booth.type === "icon";
   const zoneText = state.lang === "lo" ? "ໂຊນ" : "Zone";
   const boothText = state.lang === "lo" ? "ບູທ" : "Booth";
   const text = isPoi
@@ -673,9 +757,9 @@ export async function shareBooth() {
 function closeDetailDialog() {
   const dialog = $("#detail-dialog");
 
-  if (!dialog || !dialog.open) return;
+  if (!dialog || !dialog.open || dialog.classList.contains("closing")) return;
 
-  dialog.classList.remove("expanded");
+  dialog.classList.remove("expanded", "is-open");
   dialog.classList.add("closing");
 
   setTimeout(() => {
@@ -827,12 +911,10 @@ function setOrigin(id) {
 
   // วาดหมุดสีน้ำเงินที่บูทต้นทาง (ต้องมี <g id="origin-pin"></g> ใน SVG แผนที่)
   const g = $("#origin-pin");
+  const c = elementCenter(booth);
   if (g) {
     g.innerHTML = pinMarkup("#1a73e8"); // สีน้ำเงิน
-    g.setAttribute(
-      "transform",
-      `translate(${booth.x + booth.width / 2} ${booth.y - 3})`,
-    );
+    g.setAttribute("transform", `translate(${c.x} ${c.y})`);
   }
 
   toast(
@@ -843,11 +925,7 @@ function setOrigin(id) {
 
   // ถ้ามีบูทปลายทางที่เลือกค้างอยู่ และเป็นคนละบูท ให้นำทางทันที
   if (state.selected && state.selected !== id) showDirections();
-  const detailDialog = $("#detail-dialog");
-
-  if (detailDialog && detailDialog.open) {
-    closeDetailDialog();
-  }
+  closeDetailDialog();
 }
 
 export function clearOrigin() {
