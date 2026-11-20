@@ -4,7 +4,7 @@ import { setFeaturedShops, setEventInfo, setEvent } from "./state.js";
 
 import { setMapLayout, setIconImages } from "./map-layout.js";
 
-const STORAGE_KEY = "eventmap_api_payload_v9";
+const STORAGE_KEY = "eventmap_api_payload_v10";
 
 function applyApiPayload(payload) {
   if (payload?.error) {

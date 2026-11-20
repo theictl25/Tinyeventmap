@@ -13,8 +13,9 @@ $initialStats = get_visitor_stats();
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Event Map Manager</title>
-    <link rel="stylesheet" href="style.css">
-    <link rel="stylesheet" href="manager.css">
+    <link rel="icon" type="image/png" href="assets/default_logo.png">
+    <link rel="stylesheet" href="style.css?v=<?= file_exists(__DIR__ . '/style.css') ? filemtime(__DIR__ . '/style.css') : '1.0' ?>">
+    <link rel="stylesheet" href="manager.css?v=<?= file_exists(__DIR__ . '/manager.css') ? filemtime(__DIR__ . '/manager.css') : '1.0' ?>">
 </head>
 
 <body class="manager-page">
@@ -193,7 +194,7 @@ $initialStats = get_visitor_stats();
         <div class="manager-preview-image" id="map-preview-image"></div>
     </dialog>
 
-    <script type="module" src="js/admin/admin-manager.js"></script>
+    <script type="module" data-cfasync="false" src="js/admin/admin-manager.js?v=<?= file_exists(__DIR__ . '/js/admin/admin-manager.js') ? filemtime(__DIR__ . '/js/admin/admin-manager.js') : '1.0' ?>"></script>
 </body>
 
 </html>

@@ -1,6 +1,6 @@
 <?php
 
-$password = "1234";
+$password = "ictlaoPassw0rd1tnem";
 
 $hash = password_hash($password, PASSWORD_DEFAULT);
 

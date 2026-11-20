@@ -474,12 +474,12 @@ export function detailHTML(booth) {
     </div>
 
     <div class="detail-actions">
-  <button class="button primary" data-action="directions">
+  /*<button class="button primary" data-action="directions">
     ${icon("route")} ${t("getDirections")}
   </button>
   <button class="button" data-action="set-origin">
     ${icon("pin")} ${state.lang === "lo" ? "ຂ້ອຍຢູ່ບ່ອນນີ້" : "I'm here"}
-  </button>
+  </button>*/
   <button class="button" data-action="share">
     ${icon("share")} ${isPoi ? (state.lang === "lo" ? "ແຊຣ໌ສະຖານທີ່" : "Share Location") : t("shareBooth")}
   </button>

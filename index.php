@@ -35,17 +35,18 @@ record_visitor_ping($vsid, 'ping');
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="theme-color" content="#991b1e">
     <title data-i18n="docTitleHome">Event Map</title>
+    <link rel="icon" type="image/png" href="assets/default_logo.png">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Noto+Sans+Lao:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="style.css?v=<?= file_exists(__DIR__ . '/style.css') ? filemtime(__DIR__ . '/style.css') : '1.0' ?>">
 </head>
 
 <body>
     <header class="header"></header>
     <main class="layout"></main>
     <footer id="footer"></footer>
-    <script type="module" src="js/app/app.js"></script>
+    <script type="module" data-cfasync="false" src="js/app/app.js?v=<?= file_exists(__DIR__ . '/js/app/app.js') ? filemtime(__DIR__ . '/js/app/app.js') : '1.0' ?>"></script>
 
 </body>
 

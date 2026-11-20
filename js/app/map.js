@@ -60,6 +60,8 @@ export function addBooth(
   mapLabel = "",
   rotation = 0,
   points = null,
+  fillOpacity = 1,
+  border = {},
 ) {
   const id = String(boothId || zone + String(number).padStart(2, "0")).trim();
   const shop = featuredShops[id] || {};
@@ -92,6 +94,8 @@ export function addBooth(
     textColor,
     rotation,
     points,
+    fillOpacity,
+    border,
     description: shop?.description || t("defaultDesc"),
     hours: shop?.hours || t("defaultHours"),
     facebook: String(shop?.facebook ?? "").trim(),
@@ -137,6 +141,12 @@ export function buildMapData(populateCategoryDropdownCb) {
           id,
         booth.rotation,
         booth.points,
+        booth.fillOpacity,
+        {
+          width: booth.borderWidth,
+          radius: booth.borderRadius,
+          color: booth.borderColor,
+        },
       );
     });
 
@@ -205,6 +215,12 @@ export function buildMapData(populateCategoryDropdownCb) {
         fontSize: item.fontSize || 12,
         textColor: item.textColor || "#334155",
         rotation: item.rotation || 0,
+        fillOpacity: item.fillOpacity ?? 1,
+        border: {
+          width: item.borderWidth,
+          radius: item.borderRadius,
+          color: item.borderColor,
+        },
         description,
         hours,
         facebook: String(rawShop.facebook ?? "").trim(),
@@ -236,6 +252,13 @@ function zoneStyle(zone) {
 function mapShape(item, attributes) {
   const centerX = item.x + item.width / 2;
   const centerY = item.y + item.height / 2;
+  const b = item.border || {
+    width: item.borderWidth,
+    radius: item.borderRadius,
+    color: item.borderColor,
+  };
+
+  let el;
   if (item.type === "walkway") {
     return svgElement("rect", {
       ...attributes,
@@ -245,47 +268,50 @@ function mapShape(item, attributes) {
       height: item.height,
       stroke: "none",
     });
-  }
-  if (
+  } else if (
     item.shape === "polygon" &&
     Array.isArray(item.points) &&
     item.points.length >= 3
   ) {
-    return svgElement("polygon", {
+    el = svgElement("polygon", {
       ...attributes,
       points: item.points.map((p) => `${p.x},${p.y}`).join(" "),
       "stroke-linejoin": "round",
     });
-  }
-  if (item.shape === "circle") {
-    return svgElement("ellipse", {
+  } else if (item.shape === "circle") {
+    el = svgElement("ellipse", {
       ...attributes,
       cx: centerX,
       cy: centerY,
       rx: item.width / 2,
       ry: item.height / 2,
     });
-  }
-  if (item.shape === "triangle") {
-    return svgElement("polygon", {
+  } else if (item.shape === "triangle") {
+    el = svgElement("polygon", {
       ...attributes,
       points: `${centerX},${item.y} ${item.x + item.width},${item.y + item.height} ${item.x},${item.y + item.height}`,
     });
-  }
-  if (item.shape === "hexagon") {
-    return svgElement("polygon", {
+  } else if (item.shape === "hexagon") {
+    el = svgElement("polygon", {
       ...attributes,
       points: `${item.x + item.width * 0.25},${item.y} ${item.x + item.width * 0.75},${item.y} ${item.x + item.width},${centerY} ${item.x + item.width * 0.75},${item.y + item.height} ${item.x + item.width * 0.25},${item.y + item.height} ${item.x},${centerY}`,
     });
+  } else {
+    el = svgElement("rect", {
+      ...attributes,
+      x: item.x,
+      y: item.y,
+      width: item.width,
+      height: item.height,
+      rx: b.radius ?? 8,
+    });
   }
-  return svgElement("rect", {
-    ...attributes,
-    x: item.x,
-    y: item.y,
-    width: item.width,
-    height: item.height,
-    rx: 8,
-  });
+
+  const style = [];
+  if (b.width !== undefined) style.push(`stroke-width:${b.width}px`);
+  if (b.color) style.push(`stroke:${b.color}`);
+  if (style.length) el.setAttribute("style", style.join(";"));
+  return el;
 }
 
 function mapPathData(points) {
@@ -598,10 +624,108 @@ function createItemTextElement({
 
   return textElement;
 }
+function buildBoothGroup(booth) {
+  const zoneTextStr = state.lang === "lo" ? "ໂຊນ" : "Zone";
+  const color = zoneStyle(booth.zone);
+  const group = svgElement("g", {
+    class: "booth",
+    role: "button",
+    tabindex: "0",
+    "aria-label": `${booth.id}, ${booth.name}, ${zoneTextStr} ${booth.zone}`,
+    "aria-pressed": "false",
+    "data-id": booth.id,
+    ...(booth.rotation
+      ? {
+          transform: `rotate(${booth.rotation} ${booth.x + booth.width / 2} ${booth.y + booth.height / 2})`,
+        }
+      : {}),
+  });
 
+  const lines = wrapItemLabel(
+    booth.mapLabel,
+    booth.width,
+    booth.height,
+    booth.fontSize,
+    false,
+  );
+  const textElement = createItemTextElement({
+    lines,
+    fontSize: booth.fontSize,
+    textColor: booth.textColor,
+    centerX: booth.x + booth.width / 2,
+    centerY: booth.y + booth.height / 2,
+    verticalWalkway: false,
+    className: "booth-label",
+  });
+
+  group.append(
+    mapShape(booth, {
+      fill: booth.color || color.background,
+      stroke: "#64748b",
+      "fill-opacity": booth.fillOpacity ?? 1,
+    }),
+  );
+  if (booth.customLogo) {
+    const pad = Math.max(
+      2,
+      Math.min(4, Math.floor(Math.min(booth.width, booth.height) * 0.08)),
+    );
+    const mapLogoUrl = booth.customLogo.includes("drive.google.com")
+      ? booth.customLogo.replace(/sz=w\d+/, "sz=w160")
+      : booth.customLogo.includes("googleusercontent.com")
+        ? booth.customLogo.replace(/=w\d+.*$/, "=w160")
+        : booth.customLogo;
+
+    const imageElement = svgElement("image", {
+      href: mapLogoUrl,
+      x: booth.x + pad,
+      y: booth.y + pad,
+      width: Math.max(1, booth.width - pad * 2),
+      height: Math.max(1, booth.height - pad * 2),
+      preserveAspectRatio: "xMidYMid meet",
+      class: "booth-logo",
+    });
+
+    // Fallback to text label if logo image fails to load
+    imageElement.addEventListener("error", () => {
+      imageElement.remove();
+      if (textElement && !group.contains(textElement)) {
+        group.append(textElement);
+      }
+    });
+
+    group.append(imageElement);
+  } else if (textElement) {
+    group.append(textElement);
+  }
+
+  // group.addEventListener("click", (event) => {
+  //   event.preventDefault();
+  //   event.stopPropagation();
+
+  //   if (selectBoothRef) {
+  //     selectBoothRef(booth.id, true, false);
+  //   }
+  // });
+
+  group.addEventListener("keydown", (event) => {
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      event.stopPropagation();
+
+      if (selectBoothRef) {
+        selectBoothRef(booth.id, true, true);
+      }
+    }
+  });
+
+  boothElements.set(booth.id, group);
+  return group;
+}
 export function renderMap(applyFiltersCb) {
   const size = mapSize();
   const layout = getMapLayout();
+  const boothByLayoutId = new Map(booths.map((b) => [b.id, b]));
   $("#map-background")?.setAttribute("width", size.width);
   $("#map-background")?.setAttribute("height", size.height);
   const bgRect = $("#map-background");
@@ -631,201 +755,110 @@ export function renderMap(applyFiltersCb) {
   $("#zone-filters").replaceChildren();
   boothElements.clear();
 
-  getMapLayout()
-    .elements.filter((item) => item.type !== "booth")
-    .forEach((item) => {
-      const isInteractive =
-        item.type === "stage" ||
-        item.type === "other" ||
-        (item.type === "icon" && Boolean(getIconImages()[item.iconId]));
-      const itemId = item.id;
-      const centerX = item.x + item.width / 2;
-      const centerY = item.y + item.height / 2;
-      const rotation = Number(item.rotation) || 0;
-      const ownLabel =
-        (state.lang === "lo" ? item.label_lo : item.label_en) ||
-        item.label_en ||
-        item.label_lo;
-      const label =
-        item.type === "tree"
-          ? ""
-          : item.type === "icon"
-            ? ownLabel || ""
-            : ownLabel || item.type;
-      const group = svgElement("g", {
-        class: `map-element map-${item.type}${isInteractive ? " booth interactive-poi" : ""}`,
-        ...(isInteractive
-          ? {
-              role: "button",
-              tabindex: "0",
-              "aria-label": label,
-              "aria-pressed": "false",
-              "data-id": itemId,
-            }
-          : {}),
-        ...(rotation
-          ? { transform: `rotate(${rotation} ${centerX} ${centerY})` }
-          : {}),
-      });
-      if (item.type === "tree") {
-        appendTree(group, item);
-      } else if (item.type === "path") {
-        group.append(
-          svgElement("path", {
-            d: mapPathData(item.points),
-            fill: "none",
-            stroke: item.color,
-            "stroke-width": item.pathWidth,
-            "stroke-linecap": "round",
-            "stroke-linejoin": "round",
-            "pointer-events": "none",
-          }),
-        );
-      } else if (item.type === "icon") {
-        appendIcon(group, item);
-      } else if (item.type === "label") {
-      } else {
-        group.append(mapShape(item, { fill: item.color, stroke: "#94a3b8" }));
-      }
-      const verticalWalkway =
-        item.type === "walkway" && item.height > item.width;
-      const lines =
-        item.type === "path"
-          ? []
-          : wrapItemLabel(
-              label,
-              item.width,
-              item.height,
-              item.fontSize,
-              verticalWalkway,
-            );
-      const textElement = createItemTextElement({
-        lines,
-        fontSize: item.fontSize,
-        textColor: item.textColor || "#334155",
-        centerX: item.x + item.width / 2,
-        centerY:
-          item.type === "icon"
-            ? item.y + item.height + (Number(item.fontSize) || 12) + 2
-            : item.y + item.height / 2,
-        verticalWalkway,
-        className: isInteractive ? "booth-label" : "",
-      });
-      if (textElement) {
-        group.append(textElement);
-      }
-      if (isInteractive) {
-        group.addEventListener("keydown", (event) => {
-          if (event.key === "Enter" || event.key === " ") {
-            event.preventDefault();
-            event.stopPropagation();
-            if (selectBoothRef) {
-              selectBoothRef(itemId, true, true);
-            }
-          }
-        });
-        boothElements.set(itemId, group);
-      }
-      $("#map-elements").append(group);
-    });
-
-  const zoneTextStr = state.lang === "lo" ? "ໂຊນ" : "Zone";
-
-  booths.forEach((booth) => {
-    const color = zoneStyle(booth.zone);
+  getMapLayout().elements.forEach((item) => {
+    if (item.type === "booth") {
+      const booth = boothByLayoutId.get(item.boothId || item.id);
+      if (booth) $("#map-elements").append(buildBoothGroup(booth));
+      return;
+    }
+    const isInteractive =
+      item.type === "stage" ||
+      item.type === "other" ||
+      (item.type === "icon" && Boolean(getIconImages()[item.iconId]));
+    const itemId = item.id;
+    const centerX = item.x + item.width / 2;
+    const centerY = item.y + item.height / 2;
+    const rotation = Number(item.rotation) || 0;
+    const ownLabel =
+      (state.lang === "lo" ? item.label_lo : item.label_en) ||
+      item.label_en ||
+      item.label_lo;
+    const label =
+      item.type === "tree"
+        ? ""
+        : item.type === "icon"
+          ? ownLabel || ""
+          : ownLabel || item.type;
     const group = svgElement("g", {
-      class: "booth",
-      role: "button",
-      tabindex: "0",
-      "aria-label": `${booth.id}, ${booth.name}, ${zoneTextStr} ${booth.zone}`,
-      "aria-pressed": "false",
-      "data-id": booth.id,
-      ...(booth.rotation
+      class: `map-element map-${item.type}${isInteractive ? " booth interactive-poi" : ""}`,
+      ...(isInteractive
         ? {
-            transform: `rotate(${booth.rotation} ${booth.x + booth.width / 2} ${booth.y + booth.height / 2})`,
+            role: "button",
+            tabindex: "0",
+            "aria-label": label,
+            "aria-pressed": "false",
+            "data-id": itemId,
           }
         : {}),
+      ...(rotation
+        ? { transform: `rotate(${rotation} ${centerX} ${centerY})` }
+        : {}),
     });
-
-    const lines = wrapItemLabel(
-      booth.mapLabel,
-      booth.width,
-      booth.height,
-      booth.fontSize,
-      false,
-    );
+    if (item.type === "tree") {
+      appendTree(group, item);
+    } else if (item.type === "path") {
+      group.append(
+        svgElement("path", {
+          d: mapPathData(item.points),
+          fill: "none",
+          stroke: item.color,
+          "stroke-width": item.pathWidth,
+          "stroke-linecap": "round",
+          "stroke-linejoin": "round",
+          "pointer-events": "none",
+        }),
+      );
+    } else if (item.type === "icon") {
+      appendIcon(group, item);
+    } else if (item.type === "label") {
+    } else {
+      group.append(
+        mapShape(item, {
+          fill: item.color,
+          stroke: "#94a3b8",
+          "fill-opacity": item.fillOpacity ?? 1,
+        }),
+      );
+    }
+    const verticalWalkway = item.type === "walkway" && item.height > item.width;
+    const lines =
+      item.type === "path"
+        ? []
+        : wrapItemLabel(
+            label,
+            item.width,
+            item.height,
+            item.fontSize,
+            verticalWalkway,
+          );
     const textElement = createItemTextElement({
       lines,
-      fontSize: booth.fontSize,
-      textColor: booth.textColor,
-      centerX: booth.x + booth.width / 2,
-      centerY: booth.y + booth.height / 2,
-      verticalWalkway: false,
-      className: "booth-label",
+      fontSize: item.fontSize,
+      textColor: item.textColor || "#334155",
+      centerX: item.x + item.width / 2,
+      centerY:
+        item.type === "icon"
+          ? item.y + item.height + (Number(item.fontSize) || 12) + 2
+          : item.y + item.height / 2,
+      verticalWalkway,
+      className: isInteractive ? "booth-label" : "",
     });
-
-    group.append(
-      mapShape(booth, {
-        fill: booth.color || color.background,
-        stroke: "#64748b",
-      }),
-    );
-    if (booth.customLogo) {
-      const pad = Math.max(
-        2,
-        Math.min(4, Math.floor(Math.min(booth.width, booth.height) * 0.08)),
-      );
-      const mapLogoUrl = booth.customLogo.includes("drive.google.com")
-        ? booth.customLogo.replace(/sz=w\d+/, "sz=w160")
-        : booth.customLogo.includes("googleusercontent.com")
-          ? booth.customLogo.replace(/=w\d+.*$/, "=w160")
-          : booth.customLogo;
-
-      const imageElement = svgElement("image", {
-        href: mapLogoUrl,
-        x: booth.x + pad,
-        y: booth.y + pad,
-        width: Math.max(1, booth.width - pad * 2),
-        height: Math.max(1, booth.height - pad * 2),
-        preserveAspectRatio: "xMidYMid meet",
-        class: "booth-logo",
-      });
-
-      // Fallback to text label if logo image fails to load
-      imageElement.addEventListener("error", () => {
-        imageElement.remove();
-        if (textElement && !group.contains(textElement)) {
-          group.append(textElement);
-        }
-      });
-
-      group.append(imageElement);
-    } else if (textElement) {
+    if (textElement) {
       group.append(textElement);
     }
-
-    // group.addEventListener("click", (event) => {
-    //   event.preventDefault();
-    //   event.stopPropagation();
-
-    //   if (selectBoothRef) {
-    //     selectBoothRef(booth.id, true, false);
-    //   }
-    // });
-
-    group.addEventListener("keydown", (event) => {
-      if (event.key === "Enter" || event.key === " ") {
-        event.preventDefault();
-        event.stopPropagation();
-
-        if (selectBoothRef) {
-          selectBoothRef(booth.id, true, true);
+    if (isInteractive) {
+      group.addEventListener("keydown", (event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          event.stopPropagation();
+          if (selectBoothRef) {
+            selectBoothRef(itemId, true, true);
+          }
         }
-      }
-    });
-
-    boothElements.set(booth.id, group);
-    $("#booth-layer").append(group);
+      });
+      boothElements.set(itemId, group);
+    }
+    $("#map-elements").append(group);
   });
 
   /* Legacy gates are intentionally disabled: entrances/exits now come from MapLayout. */

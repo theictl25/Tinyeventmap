@@ -257,6 +257,18 @@ function normalizePolygonPoints(points, x, y, width, height) {
   ];
 }
 
+function normalizeFillOpacity(value) {
+  if (value === undefined || value === null || value === "") return 1;
+  const n = Number(value);
+  return Number.isFinite(n) ? Math.min(1, Math.max(0, n)) : 1;
+}
+
+function optionalNumber(value, min, max) {
+  if (value === undefined || value === null || value === "") return undefined;
+  const n = Number(value);
+  return Number.isFinite(n) ? Math.min(max, Math.max(min, n)) : undefined;
+}
+
 /**
  * Makes an individual element safe for rendering without changing its
  * external schema. Unknown element types become "other".
@@ -331,6 +343,16 @@ function normalizeElement(element, index) {
     ...(points ? { points } : {}),
     ...(type === "path"
       ? { pathWidth: Math.max(1, positiveNumber(element?.pathWidth, 28)) }
+      : {}),
+    fillOpacity: normalizeFillOpacity(element?.fillOpacity),
+    ...(optionalNumber(element?.borderWidth, 0, Infinity) !== undefined
+      ? { borderWidth: optionalNumber(element?.borderWidth, 0, Infinity) }
+      : {}),
+    ...(optionalNumber(element?.borderRadius, 0, Infinity) !== undefined
+      ? { borderRadius: optionalNumber(element.borderRadius, 0, Infinity) }
+      : {}),
+    ...(/^#[0-9a-f]{6}$/i.test(String(element?.borderColor || ""))
+      ? { borderColor: String(element.borderColor) }
       : {}),
   };
 }
@@ -417,6 +439,12 @@ export function compactMapLayout(layout) {
       }
       if (el.shape && el.shape !== "rectangle") item.shape = el.shape;
       if (el.rotation) item.rotation = Math.round(el.rotation * 10) / 10;
+      if (el.fillOpacity !== undefined && el.fillOpacity < 1) {
+        item.fillOpacity = Math.round(el.fillOpacity * 100) / 100;
+      }
+      if (el.borderWidth !== undefined) item.borderWidth = el.borderWidth;
+      if (el.borderRadius !== undefined) item.borderRadius = el.borderRadius;
+      if (el.borderColor) item.borderColor = el.borderColor;
       if (el.type === "icon" && el.iconId) item.iconId = el.iconId;
       if (el.points && (el.type === "path" || el.shape === "polygon")) {
         item.points = el.points.map((point) => ({

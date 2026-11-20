@@ -44,7 +44,7 @@ record_visitor_ping($vsid, 'ping');
     <header class="header"></header>
     <main class="layout"></main>
     <footer id="footer"></footer>
-    <script type="module" src="js/app/app.js"></script>
+    <script type="module" src="js/app/app.js?v=1.0"></script>
 </body>
 
 </html>

@@ -80,6 +80,19 @@ function compact_layout(array $layout): array
       if ($rotation < 0) $rotation += 360.0;
       if ($rotation != 0.0) $item['rotation'] = round($rotation, 1);
     }
+    if (isset($el['fillOpacity']) && is_numeric($el['fillOpacity'])) {
+      $fo = max(0.0, min(1.0, (float)$el['fillOpacity']));
+      if ($fo < 1.0) $item['fillOpacity'] = round($fo, 2);
+    }
+    if (isset($el['borderWidth']) && is_numeric($el['borderWidth'])) {
+      $item['borderWidth'] = round(max(0.0, (float)$el['borderWidth']), 1);
+    }
+    if (isset($el['borderRadius']) && is_numeric($el['borderRadius'])) {
+      $item['borderRadius'] = round(max(0.0, (float)$el['borderRadius']), 1);
+    }
+    if (!empty($el['borderColor']) && preg_match('/^#[0-9a-f]{6}$/i', (string)$el['borderColor'])) {
+      $item['borderColor'] = (string)$el['borderColor'];
+    }
     $isPolygon = ($el['shape'] ?? '') === 'polygon' && $type !== 'path';
     if (($type === 'path' || $isPolygon) && isset($el['points']) && is_array($el['points'])) {
       $points = [];

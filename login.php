@@ -30,7 +30,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>Admin Login</title>
-  <link rel="stylesheet" href="style.css">
+  <link rel="icon" type="image/png" href="assets/default_logo.png">
+  <link rel="stylesheet" href="style.css?v=<?= file_exists(__DIR__ . '/style.css') ? filemtime(__DIR__ . '/style.css') : '1.0' ?>">
 </head>
 
 <body>

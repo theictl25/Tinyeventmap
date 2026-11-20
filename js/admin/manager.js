@@ -717,6 +717,19 @@ function blossomMarkup(cx, cy, size) {
     '" fill="#facc15"/>'
   );
 }
+
+function strokeAttrs(item) {
+  const width = item.borderWidth ?? 1.5;
+  const color = item.borderColor || "#64748b";
+  return (
+    ' style="stroke:' +
+    escapeHTML(color) +
+    ";stroke-width:" +
+    width +
+    'px;stroke-linejoin:round"'
+  );
+}
+
 function shapeMarkup(item, fill) {
   const x = item.x,
     y = item.y,
@@ -882,9 +895,13 @@ function shapeMarkup(item, fill) {
     return (
       '<polygon points="' +
       item.points.map((p) => p.x + "," + p.y).join(" ") +
+      '" rx="' +
+      (item.borderRadius ?? 6) +
       '" fill="' +
       fill +
-      '" stroke-linejoin="round"/>'
+      '"' +
+      strokeAttrs(item) +
+      "/>"
     );
   }
   if (item.shape === "circle")
@@ -899,7 +916,9 @@ function shapeMarkup(item, fill) {
       height / 2 +
       '" fill="' +
       fill +
-      '"/>'
+      '"' +
+      strokeAttrs(item) +
+      "/>"
     );
   if (item.shape === "triangle")
     return (
@@ -915,9 +934,13 @@ function shapeMarkup(item, fill) {
       x +
       "," +
       (y + height) +
+      '" rx="' +
+      (item.borderRadius ?? 6) +
       '" fill="' +
       fill +
-      '"/>'
+      '"' +
+      strokeAttrs(item) +
+      "/>"
     );
   if (item.shape === "hexagon")
     return (
@@ -945,9 +968,13 @@ function shapeMarkup(item, fill) {
       x +
       "," +
       centerY +
+      '" rx="' +
+      (item.borderRadius ?? 6) +
       '" fill="' +
       fill +
-      '"/>'
+      '"' +
+      strokeAttrs(item) +
+      "/>"
     );
   return (
     '<rect x="' +
@@ -958,9 +985,13 @@ function shapeMarkup(item, fill) {
     width +
     '" height="' +
     height +
-    '" rx="6" fill="' +
+    '" rx="' +
+    (item.borderRadius ?? 6) +
+    '" fill="' +
     fill +
-    '"/>'
+    '"' +
+    strokeAttrs(item) +
+    "/>"
   );
 }
 function renderCanvas() {
@@ -1010,6 +1041,11 @@ function renderCanvas() {
           ? item.y + item.height + (Number(item.fontSize) || 12) + 2
           : labelCenterY;
     const verticalWalkway = item.type === "walkway" && item.height > item.width;
+    const handleSize = Math.max(
+      10,
+      Math.min(40, Math.round(Math.min(item.width, item.height) * 0.14)),
+    );
+    const half = handleSize / 2;
     const handle =
       !active || selectedIds.size !== 1 || hasPoints(item)
         ? ""
@@ -1029,13 +1065,20 @@ function renderCanvas() {
                 "<rect" +
                 attributes +
                 ' x="' +
-                (handleX - 5) +
+                (handleX - half) +
                 '" y="' +
-                (handleY - 5) +
-                '" width="10" height="10" rx="2"/>'
+                (handleY - half) +
+                '" width="' +
+                handleSize +
+                '" height="' +
+                handleSize +
+                '" rx="' +
+                Math.round(handleSize * 0.2) +
+                '"/>'
               );
             })
             .join("");
+
     const pathPointRadius =
       item.type === "path"
         ? Math.max(
@@ -1045,7 +1088,7 @@ function renderCanvas() {
               Math.max(3, (item.pathWidth || 28) / 2 - 2),
             ),
           )
-        : 7;
+        : Math.max(7, half);
     const pathPoints =
       active && selectedIds.size === 1 && hasPoints(item)
         ? item.points
@@ -1070,18 +1113,20 @@ function renderCanvas() {
         ? '<line class="rotation-handle-line" x1="' +
           labelCenterX +
           '" y1="' +
-          (item.y - 5) +
+          (item.y - half) +
           '" x2="' +
           labelCenterX +
           '" y2="' +
-          (item.y - 24) +
+          (item.y - half - handleSize * 2) +
           '"/><circle class="rotation-handle" data-rotate-id="' +
           escapeHTML(item.id) +
           '" cx="' +
           labelCenterX +
           '" cy="' +
-          (item.y - 30) +
-          '" r="6"/>'
+          (item.y - half - handleSize * 2 - half) +
+          '" r="' +
+          Math.max(6, half) +
+          '"/>'
         : "";
     const rotation = Number(item.rotation) || 0;
     html +=
@@ -1101,7 +1146,13 @@ function renderCanvas() {
           ')"'
         : "") +
       '">' +
-      shapeMarkup(item, escapeHTML(itemFill(item))) +
+      (canBePolygon(item.type) && item.fillOpacity < 1
+        ? '<g fill-opacity="' +
+          item.fillOpacity +
+          '">' +
+          shapeMarkup(item, escapeHTML(itemFill(item))) +
+          "</g>"
+        : shapeMarkup(item, escapeHTML(itemFill(item)))) +
       (item.type === "label" && active
         ? '<rect x="' +
           item.x +
@@ -1235,6 +1286,38 @@ function renderInspector() {
           field(managerT("width"), "width", "number", 'min="1"') +
           field(managerT("height"), "height", "number", 'min="1"')) +
     (item.type === "label" ? "" : field(managerT("color"), "color", "color")) +
+    (canBePolygon(item.type)
+      ? "<label>" +
+        tx("fillOpacity", "Fill opacity", "ຄວາມໂປ່ງໃສຂອງສີ") +
+        ": " +
+        Math.round((item.fillOpacity ?? 1) * 100) +
+        '%<input type="range" min="0" step="5" data-key="fillOpacity" value="' +
+        Math.round((item.fillOpacity ?? 1) * 100) +
+        '"></label>'
+      : "") +
+    (canBePolygon(item.type)
+      ? field(
+          tx("borderWidth", "Border width", "ຄວາມໜາເສັ້ນຂອບ"),
+          "borderWidth",
+          "number",
+          'min="0" step="0.5"',
+        ) +
+        (item.shape === "rectangle" || !item.shape
+          ? field(
+              tx("borderRadius", "Corner radius", "ຄວາມໂຄ້ງມຸມ"),
+              "borderRadius",
+              "number",
+              'min="0"',
+            )
+          : "") +
+        field(
+          "<label>" +
+            tx("borderColor", "Border color", "ສີເສັ້ນຂອບ") +
+            '<input type="color" data-key="borderColor" value="' +
+            escapeHTML(item.borderColor || "#64748b") +
+            '"></label>',
+        )
+      : "") +
     (item.type !== "tree"
       ? field(managerT("fontSize"), "fontSize", "number", 'min="1"') +
         field(managerT("textColor"), "textColor", "color")
@@ -1597,10 +1680,6 @@ async function exportPNG() {
       "style",
     );
     style.textContent = `
-      .builder-item rect, .builder-item ellipse, .builder-item polygon {
-        stroke: #64748b;
-        stroke-width: 1.5;
-      }
       .builder-item.type-tree rect, .builder-item.type-tree ellipse, .builder-item.type-tree polygon, .builder-item.type-tree path {
         stroke: none !important;
       }
@@ -2173,6 +2252,16 @@ inspector.addEventListener("input", (event) => {
       ? event.target.value.trim().toUpperCase()
       : event.target.value;
   if (key === "zone") ensureZoneColor(item.zone);
+  if (key === "fillOpacity") {
+    item.fillOpacity = Math.min(
+      1,
+      Math.max(0, Number(event.target.value) / 100),
+    );
+  }
+  if (key === "borderWidth")
+    item.borderWidth = Math.max(0, Number(event.target.value) || 0);
+  if (key === "borderRadius")
+    item.borderRadius = Math.max(0, Number(event.target.value) || 0);
   if (key === "iconId") item.iconId = cleanIconId(event.target.value);
   renderCanvas();
 });
@@ -2192,12 +2281,31 @@ inspector.addEventListener("change", (event) => {
         ? event.target.value.trim().toUpperCase()
         : event.target.value;
     if (key === "zone") ensureZoneColor(item.zone);
+    if (key === "fillOpacity") {
+      item.fillOpacity = Math.min(
+        1,
+        Math.max(0, Number(event.target.value) / 100),
+      );
+    }
+    if (key === "borderWidth")
+      item.borderWidth = Math.max(0, Number(event.target.value) || 0);
+    if (key === "borderRadius")
+      item.borderRadius = Math.min(
+        100,
+        Math.max(0, Number(event.target.value) || 0),
+      );
     if (key === "shape") applyShapeChange(item);
     renderCanvas();
   }
   if (editStart && !equal(editStart, layout)) remember(editStart);
   editStart = null;
-  if (key === "zone" || key === "iconId" || key === "shape") renderAll();
+  if (
+    key === "zone" ||
+    key === "iconId" ||
+    key === "shape" ||
+    key === "fillOpacity"
+  )
+    renderAll();
 });
 inspector.addEventListener("click", (event) => {
   if (event.target.id === "add-path-point") {
